@@ -6,6 +6,12 @@ rm(list = ls());
 cat("\014")   
 # close all plots
 graphics.off() 
+# override R's tendency to use scientific notation
+options("scipen" =100, "digits" = 4) 
+
+
+euc.dist <- function(x1, x2) sqrt(sum((x1 - x2) ^ 2))
+
 
 library(tidyverse)
 library(caret)
@@ -25,8 +31,7 @@ patChar= read.csv("PatientCharacteristics_withDose.csv")
 # variables
 threshold= 27
 replace= 1
-onehotencode= 1
-
+onehotencode= 0
 
 names(patChar)[6]<-paste("pid")  # Changing column name for merging
 
@@ -58,13 +63,10 @@ rm(temp)
 
 sum(is.na(dataVisit1))
 
-
-
 # Impute missing values- is.na(dataVisit1[,i]) returns TRUE only for row index of column with NA
 for(i in 2:ncol(dataVisit1)){
           dataVisit1[is.na(dataVisit1[,i]), i] <- median(dataVisit1[,i], na.rm = TRUE)
 }  
-
 
 if (onehotencode==1){
   dataVisit1$visitnum=NULL
@@ -86,8 +88,51 @@ if (onehotencode==0){
   dataVisit1=dataVisit1[-c(2,16:24,26,28)]
 }
 
-highdose= subset(dataVisit1, dose_hours>threshold)
-lowdose= subset(dataVisit1, dose_hours<=threshold)
+dataV1original= dataVisit1
+# normalize by subtracting mean and dividing by std
+for(i in 2:ncol(dataVisit1)){
+  dataVisit1[,i] <- (dataVisit1[,i]-mean(dataVisit1[,i]))/sd(dataVisit1[,i])
+}  
 
 dataVisit1$treat=ifelse(dataVisit1$dose_hours<=threshold, 1, 0)
 
+highdose= subset(dataVisit1, dose_hours>threshold)
+lowdose= subset(dataVisit1, dose_hours<=threshold)
+
+highdoseindex= which(dataVisit1$dose_hours>threshold)
+lowdoseindex= which(dataVisit1$dose_hours<=threshold)
+# rm(mathcedindex_e)
+# # Euclidean distance matching ---------------------------------------------
+lowdosetemp = lowdose[c(3:ncol(lowdose)-1)];
+highdosetemp = highdose[c(3:ncol(highdose)-1)];
+matchedindex_e=data.frame(matrix(0, nrow(lowdosetemp), 2))
+for (i in 1:nrow(lowdosetemp)){
+dist=1000;
+for (j in 1:nrow(highdosetemp)){
+if (euc.dist(lowdosetemp[i,],highdosetemp[j,])<dist){
+dist= euc.dist(lowdosetemp[i,],highdosetemp[j,])
+matchedindex_e[i,]= c(j,dist)
+}
+}
+}
+matcheddose= highdosetemp[matchedindex_e$X1,]
+
+# }
+# if replace==0                                                   % IF without replacement
+# highdosetemp(matchedSubIndex_e(i,1),:)= 50*...
+# ones(1,size(highdosetemp,2));                         % Make used control unmatchable
+# end
+# end
+# matchedControlIndex_e = unmatchedControlIndex(matchedSubIndex_e(:,1));
+# assessBalance(treatedIndex, unmatchedControlIndex, matchedControlIndex_e,...
+#               "Euclidian", visit1Mat)                                         % Visually evaluate balance
+# % Test effect
+# [h, p, effectTreated, effectControl]= ttestImprovement(treatedIndex,...
+#                                                        matchedControlIndex_e, visit1Mat, visit2Mat);
+# medianTreatedEffect_e= median(effectTreated);                       % Median improvement in treated group
+# medianControlEffect_e= median(effectControl);                       % Median improvement in control group
+# effectsHistogram(effectTreated, effectControl, "Eucladian")
+# h
+# p
+# 
+# }
