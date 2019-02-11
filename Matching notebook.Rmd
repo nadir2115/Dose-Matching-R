@@ -1,3 +1,18 @@
+
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
+
+
+```{r}
 #Matching problem on evaluating effects of dose- Nadir Nibras
 
 # clear workspace variables
@@ -33,7 +48,7 @@ names(patChar)[6]<-paste("pid")  # Changing column name for merging
 
 # Remove sparse features/features with no use
 evalData=evalData[-c(1:4, 7:127, 129:203, 205:245, 247:259, 261:276, 278:364, 369:375)]  
-patChar=patChar[-c(1:5, 7:8, 10:11, 13, 23:26, 28,31, 33)]
+patChar=patChar[c(6,9,12,  13, 19, 23:26, 28:29,31, 33)]
 
 # Merge data
 dataMerged= merge(evalData,patChar)
@@ -204,3 +219,6 @@ qqplot(data12$log_mean_time_MA_PA[mgen1$index.control],data12$log_mean_time_MA_P
 abline(coef=c(0,1),col=2)
 
 R2_replace= cor(data12$log_mean_time_MA_PA[mgen1$index.control],data12$log_mean_time_MA_PA[mgen1$index.treated])^2
+
+```
+
