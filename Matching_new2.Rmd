@@ -15,28 +15,17 @@ knitr::opts_chunk$set(root.dir = "C:/Users/nadir/Desktop/Matching/BKN 599 Advanc
 ## Matching project for evaluating effects of treatment dosage
 
 clear workspace variables
-```{r}
-rm(list = ls()); 
-```
-
 clear command window (same as ctrl+L. )
-```{r}
-cat("\014")  
-```
-
 close all plots
 ```{r}
+rm(list = ls()); 
+cat("\014")  
 graphics.off() 
 ```
-
 ```{r}
 library(tidyverse)
 library(Matching)
-# library(dummy)
-# library(dummies)
-# library(MatchIt)
-# library(RItools)
-# library(rbounds)
+
 ```
 
 variables
@@ -48,9 +37,9 @@ replace= 1
 Read files
 ```{r}
 setwd("C:/Users/nadir/Desktop/Matching/BKN 599 Advanced Data Analysis")
-
 evalData=read.csv("00042_evalDataset_notext.csv")
 patChar= read.csv("PatientCharacteristics_withDose.csv")
+
 ```
 
 Changing column name for merging
@@ -77,7 +66,6 @@ dataMerged$severity= ifelse(dataMerged$severity=="H", 1, 0)
 dataMerged$finished_college=ifelse(dataMerged$DEMOedu>4,1,0)
 dataMerged$DEMOedu=NULL
 ```
-
 
 Replace -99 with missing values
 ```{r}
@@ -149,8 +137,7 @@ creating binary variable indicating whether subject belongs in Low Dose or High 
 data12$treat=ifelse(dataVisit1$dose_hours<=threshold, 1, 0)
 ```
 
-
-normalize by subtracting mean and dividing by std (doing min-max instead)
+#### Normalization not needed as genetic matching uses covariance
 ```{r}
 # for(i in 2:(ncol(data12)-1)){
 #   data12[,i] <- (data12[,i]-mean(data12[,i]))/(max(data12[,i])-min(data12[,i]))
@@ -159,78 +146,79 @@ normalize by subtracting mean and dividing by std (doing min-max instead)
 
 Creating change parameters from differences in visit2 and vist 1
 ```{r}
-
 data12$sishand_change= dataVisit2$SIS_hand-dataVisit1$SIS_hand
 data12$fugm_change= dataVisit2$ufugm-dataVisit1$ufugm
 data12$logwmftMA_change= dataVisit2$log_mean_time_MA_PA-dataVisit1$log_mean_time_MA_PA
 data12$logwmftLA_change= dataVisit2$log_mean_time_LA_PA-dataVisit1$log_mean_time_LA_PA
 ```
 
-Creating 2 dataframes separatomg low dose and high dose (not used)
+
+
+
+# If we further include the datasets raw data and icareupdate
+
 ```{r}
-highdosegroup= subset(data12, treat==0)
-lowdosegroup= subset(data12, treat==1)
+setwd("C:/Users/nadir/Desktop/Matching/BKN 599 Advanced Data Analysis")
+rawd= read.csv("Raw Data_Included Subjects Only_mod.csv", sep="\t")
 
+#Note that for the raw dataset, A1Diameter and A1x values are the exact same
+rawd$multlesions= as.integer(rawd$A2x!="\\N")
+rawd= rawd[c(1,7,13, 107, 143)];
+rawd$old_stroke= as.integer(rawd$old_stroke)-1
+rawd$stroketype= as.integer(rawd$stroketype)-1
+names(rawd)[1]<-paste("pid");   #renaming column name to "pid"
+rawd$pid =toupper(rawd$pid)
+names(rawd)[2]<-paste("ischemic");   #renaming column name to "pid"
+
+data12= merge(data12, rawd, by = "pid")
 ```
+<!-- ### Creating 2 dataframes separatomg low dose and high dose (not used) -->
+<!-- ```{r} -->
+<!-- highdosegroup= subset(data12, treat==0) -->
+<!-- lowdosegroup= subset(data12, treat==1) -->
 
-saving indexes
-```{r}
-# highdoseindex= which(dataVisit1$dose_hours>threshold)
-# lowdoseindex= which(dataVisit1$dose_hours<=threshold)
-
-```
-
-
-plotting change in fugl-meyer score across all patients
-```{r}
-ggplot(data12,aes(fugm_change))+
-  geom_histogram(fill="white", col="black", binwidth = 1)
-
-```
-
-
-### Propensity Score Matching code starts here (Youtube tutorial used)
+### Propensity Score 
+Matching code starts here (Youtube tutorial used)
 
 creates a marrix from columns/features
-```{r}
-X= cbind(data12$SIS_hand, data12$ufugm,data12$CSgender,data12$NIHtot, 
-         data12$log_mean_time_MA_PA, data12$log_mean_time_LA_PA,
-         data12$severity, data12$onset_to_rand, data12$age_at_rand,
-         data12$concordance, data12$finished_college)
 
+
+```{r}
+X= cbind(data12$SIS_hand, data12$ufugm,data12$CSgender,data12$NIHtot, data12$log_mean_time_MA_PA, data12$log_mean_time_LA_PA, data12$severity, data12$onset_to_rand, data12$age_at_rand, data12$concordance, data12$finished_college,data12$ischemic, data12$A1EstVol, data12$old_stroke,data12$multlesions)
+
+### without nerual variables -->
+# X= cbind(data12$SIS_hand, data12$ufugm,data12$CSgender,data12$NIHtot, data12$log_mean_time_MA_PA, data12$log_mean_time_LA_PA, data 12$severity, data12$onset_to_rand, data12$age_at_rand, data12$concordance, data12$finished_college)
 ```
 
-Output variable that we will use to evaluate causality after matching
-```{r}
-y=data12$logwmftMA_change
 
-```
+
+
 
 ### Calculating the propensity score
 Generalized linear models are fit using the glm( ) function.
-
 treat ~ X means treat is the response of all other variables
-treat is a binary factor and x is a matrix of all predictor variables  
-
+treat is a binary factor and
 Family objects provide a convenient way to specify the details of the models used by functions such as glm
-
 family= binomial() performs Logistic Regression
 
 
 ```{r}
 model <- glm(treat ~ X, 
-             family = binomial(), data = data12)
+             family = binomial(), data = data12 )
 ```
 
 Subjects are more likely to be in treated (Low Dose) group if "Estimate" values are positive
 ```{r}
 summary(model) 
 
+
 ```
+
+
 
 ### Matching and estimating effects of causality using "Match" package
 
-"Match"" implements a variety of algorithms for multivariate matching including propensity score, Mahalanobis and inverse variance matching. The function is intended to be used in conjunction with the MatchBalance function which determines the extent to which Match has been able to achieve covariate balance
+"Match" implements a variety of algorithms for multivariate matching including propensity score, Mahalanobis and inverse variance matching. The function is intended to be used in conjunction with the MatchBalance function which determines the extent to which Match has been able to achieve covariate balance
 
 - Y=y
 A vector containing the outcome of interest. Missing values are not allowed. An outcome vector is not required because the matches generated will be the same regardless of the outcomes. Of course, without any outcomes no causal effect estimates will be produced, only a matched dataset.
@@ -252,24 +240,57 @@ If ties==FALSE, ties will be randomly broken. If the dataset is large and there 
 -replace = TRUE
 Matching with replacement
 
-####Matching using ATT and ATE
+####Matching using ATT 
 ```{r}
-rr1 =Match(Y=y, Tr= data12$treat, X= model$fitted.values, estimand = "ATT", 
+rr1 =Match(Y=NULL, Tr= data12$treat, X= model$fitted.values, estimand = "ATT", 
            M=1, ties= FALSE, replace= TRUE)
 
-# rr2 =Match(Y=y, Tr= data12$treat, X= model$fitted.values, estimand = "ATE", 
-#            M=1, ties= FALSE, replace= TRUE)
 ```
+
+
+### Exploring propensity score distributions
+
+```{r}
+datap= data12
+datap$propscore= model$fitted.values
+
+library(gridExtra)
+
+plot1<-ggplot(datap, aes(propscore)) +
+  geom_histogram(data = subset(datap,treat == '1'),fill = "red", alpha = 0.2,binwidth=0.04)+
+  geom_histogram(data = subset(datap,treat == '0'),fill = "blue", alpha = 0.2,binwidth=0.04)+
+  geom_density(data = subset(datap,treat == '1'),fill = "red", alpha = 0.2)+
+  geom_density(data = subset(datap,treat == '0'),fill = "blue", alpha = 0.2)+
+  ggtitle("Unmatched: Low Dose Patients (Red) vs High Dose Patients (Blue)")+
+  xlab("Probability of being in Low Dose group given covariates")+
+  xlim(c(0,1))+
+  ylim(c(0,27))
+
+
+plot2<-ggplot(datap, aes(propscore)) +
+  geom_histogram(data= datap[rr1$index.treated,],fill = "red", alpha = 0.2,binwidth=0.04)+
+  geom_histogram(data= datap[rr1$index.control,],fill = "blue", alpha = 0.2,binwidth=0.04)+
+  geom_density(data = datap[rr1$index.treated,],fill = "red", alpha = 0.2)+
+  geom_density(data = datap[rr1$index.control,],fill = "blue", alpha = 0.2)+
+  ggtitle("Matched: Low Dose Patients (Red) vs  High Dose Patients (Blue)")+
+  xlab("Probability of being in Low Dose group given covariates")+
+  xlim(c(0,1))+
+  ylim(c(0,27))
+
+
+
+grid.arrange(plot1, plot2, ncol=2)
+
+```
+
 
 ####Checking unique values of matched subjects
 ```{r}
 length(unique(rr1$index.treated))
 length(unique(rr1$index.control))
 
-# length(unique(rr2$index.treated))
-# length(unique(rr2$index.control))
-# 
 ```
+
 
 
 ####Assessing balance
@@ -282,25 +303,74 @@ This formula does not estimate any model. The formula is simply an efficient way
 The number of bootstrap samples to be run. If zero, no bootstraps are done. Bootstrapping is highly recommended because the bootstrapped Kolmogorov-Smirnov test provides correct coverage even when the distributions being compared are not continuous. At least 500 nboots (preferably 1000) are recommended for publication quality p-values.
 
 ```{r}
-MatchBalance(treat~ SIS_hand + ufugm + NIHtot + log_mean_time_MA_PA +
-               log_mean_time_LA_PA +CSgender+ concordance + severity + 
-               onset_to_rand + finished_college + age_at_rand,
+MatchBalance(treat~ SIS_hand + ufugm + NIHtot + log_mean_time_MA_PA + log_mean_time_LA_PA +CSgender+ concordance + severity +  onset_to_rand + finished_college + age_at_rand + ischemic + A1EstVol + old_stroke +multlesions,
              match.out= rr1, nboots=100,data= data12)
 
-# MatchBalance(treat~ SIS_hand + ufugm + NIHtot + log_mean_time_MA_PA +
-#                log_mean_time_LA_PA +CSgender+ concordance + severity + 
-#                onset_to_rand + finished_college + age_at_rand,
-#              match.out= rr2, nboots=100,data= data12)
 ```
 
 
-####Summary of the model will tell us about Causal relationship on picked Y after Matching
+####Summary of the model would tell us about Causal relationship on picked Y after Matching if we pikced y in match function
 
 ```{r}
-
 summary(rr1) 
-# summary(rr2)
 ```
+
+```{r}
+columns = colnames(data12)
+for (i in c(3:7,9,11,13,21)){
+  string= columns[i]
+  
+  b= max(data12[,i])/25
+  
+  plot1<-ggplot(data12, aes(eval(parse(text = string)))) +
+    geom_histogram(data= data12[rr1$index.treated,],fill="red",alpha =0.2, binwidth=b)+
+    geom_histogram(data= data12[-rr1$index.treated,],fill="blue",alpha =0.2, binwidth=b)+
+    ggtitle("Unmatched: Low Dose (Red) vs High Dose(Blue) ")+
+    theme(plot.title = element_text(face="bold", size=10)) +
+    xlab(paste(string, " distribution"))+
+    coord_cartesian(ylim=c(0,75))+
+    xlim(min(data12[,i]),max(data12[,i]))
+  
+  plot2<- ggplot(data12, aes(eval(parse(text = string)))) +
+    geom_histogram(data= data12[rr1$index.treated,],fill="red",alpha =0.2, binwidth=b)+
+    geom_histogram(data= data12[rr1$index.control,],fill="blue",alpha =0.2, binwidth=b)+
+    ggtitle("Matched: Low Dose (Red) vs High Dose(Blue) ")+
+    theme(plot.title = element_text( face="bold", size=10)) +
+    xlab(paste(string, " distribution"))+
+    coord_cartesian(ylim=c(0,75))+
+    xlim(min(data12[,i]),max(data12[,i]))
+  
+  
+  grid.arrange(plot1, plot2, ncol=2)
+}
+```
+
+```{r}
+for (i in c(8,10,12,20,22,23)){
+  string= columns[i]
+  
+  plot1<-ggplot(data12, aes(eval(parse(text = string)))) +
+    geom_histogram(data= data12[rr1$index.treated,],fill="red",alpha =0.2, binwidth = 0.5)+
+    geom_histogram(data= data12[-rr1$index.treated,],fill="blue",alpha =0.2, binwidth = 0.5)+
+      ggtitle("Unmatched: Low Dose(Red) vs High Dose(Blue) ")+
+    theme(plot.title = element_text(face="bold", size=10)) +
+    xlab(paste(string, " distribution"))+
+    coord_cartesian(ylim=c(0,150))  
+  
+  plot2<- ggplot(data12, aes(eval(parse(text = string)))) +
+    geom_histogram(data= data12[rr1$index.treated,],fill="red",alpha =0.2, binwidth = 0.5)+
+    geom_histogram(data= data12[rr1$index.control,],fill="blue",alpha =0.2, binwidth = 0.5)+
+    ggtitle("Matched: Low Dose (Red) vs High Dose(Blue) ")+
+    theme(plot.title = element_text(face="bold", size=10)) +
+    xlab(paste(string, " distribution"))+
+    coord_cartesian(ylim=c(0,150))
+  
+  grid.arrange(plot1, plot2, ncol=2)
+}
+```
+
+
+
 
 ####Further assessing balance- Plotting matched values for SIS Hand and Log mean time for WMFT
 ```{r}
@@ -309,8 +379,10 @@ abline(coef=c(0,1),col=2)
 
 qqplot(data12$log_mean_time_MA_PA[rr1$index.control],data12$log_mean_time_MA_PA[rr1$index.treated])
 abline(coef=c(0,1),col=2)
-
 ```
+
+
+
 
 ### Genetic matching 
 This function finds optimal balance using multivariate matching where a genetic search algorithm determines the weight each covariate is given. Balance is determined by examining cumulative probability distribution functions of a variety of standardized statistics. By default, these statistics include t-tests and Kolmogorov-Smirnov tests. A variety of descriptive statistics based on empirical-QQ (eQQ) plots can also be used or any user provided measure of balance. The statistics are not used to conduct formal hypothesis tests, because no measure of balance is a monotonic function of bias and because balance should be maximized without limit. The object returned by GenMatch can be supplied to the Match function (via the Weight.matrix option) to obtain causal estimates. GenMatch uses **GENoud** to perform the genetic search. 
@@ -322,7 +394,7 @@ A vector indicating the observations which are in the treatment regime and those
 A matrix containing the variables we wish to match on. 
 #####This matrix may contain the actual observed covariates or the propensity score or a combination of both.
 
-- pop.size= 200
+- pop.size= ``1000
 Population Size. This is the number of individuals genoud uses to solve the optimization problem. The theorems proving that genetic algorithms find good solutions are asymptotic in population size. Therefore, it is important that this value not be small. See genoud for more details.
 
 **GENoud**- GENetic Optimization Using Derivatives
@@ -332,10 +404,17 @@ Genoud is a function that combines evolutionary search algorithms with derivativ
 # Adding propensity score to estimation
 X1 = cbind(X,model$fitted.values)
 
-gen1 = GenMatch(Tr= data12$treat, X=X, pop.size=200, replace=TRUE)
-mgen1=Match(Y=y, Tr=data12$treat, X=X, Weight.matrix = gen1)
+gen1 = GenMatch(Tr= data12$treat, X=X1, pop.size=1000, replace=TRUE, max.weight=1)
+mgen1=Match(Y=NULL, Tr=data12$treat, X=X1, Weight.matrix = gen1)
 
 ```
+
+####Checking unique values of matched subjects
+```{r}
+length(unique(mgen1$index.treated))
+length(unique(mgen1$index.control))
+```
+
 
 ####Summary of the model will tell us about Causal relationship
 ```{r}
@@ -346,11 +425,8 @@ summary(mgen1)
 
 #### Assessing balance
 ```{r}
-MatchBalance(treat~ SIS_hand + ufugm + NIHtot + log_mean_time_MA_PA +
-               log_mean_time_LA_PA +CSgender+ concordance + severity + 
-               onset_to_rand + finished_college + age_at_rand,
-             data= data12, match.out= mgen1, nboots=0)
-
+MatchBalance(treat~ SIS_hand + ufugm + NIHtot + log_mean_time_MA_PA + log_mean_time_LA_PA +CSgender+ concordance + severity +  onset_to_rand + finished_college + age_at_rand + ischemic + A1EstVol + old_stroke +multlesions,
+             match.out= mgen1, nboots=100,data= data12)
 ```
 ####Further assessing balance- Plotting matched values for SIS Hand and Log mean time for WMFT
 ```{r}
@@ -362,24 +438,68 @@ qqplot(data12$log_mean_time_MA_PA[mgen1$index.control],data12$log_mean_time_MA_P
 abline(coef=c(0,1),col=2)
 
 ```
+
+
+### Checking number of unique subjects after genetic matching
 ```{r}
 length(unique(mgen1$index.treated))
 length(unique(mgen1$index.control))
 ```
 
+## Visually assessing effects on distributions
 
-
-#### GGplot
 ```{r}
-x= data12$SIS_hand[mgen1$index.control]
-y= data12$SIS_hand[mgen1$index.treated]
-df= data.frame(x,y)
-# library(ggplot2)
-ggplot(df, aes(x,y))+
-  geom_point()
-ggplot(df, aes(x,y))+
-  geom_jitter()
+columns = colnames(data12)
+for (i in c(3:7,9,11,13,21)){
+  string= columns[i]
+  
+  b= max(data12[,i])/25
+  
+  plot1<-ggplot(data12, aes(eval(parse(text = string)))) +
+    geom_histogram(data= data12[mgen1$index.treated,],fill="red",alpha =0.2, binwidth=b)+
+    geom_histogram(data= data12[-mgen1$index.treated,],fill="blue",alpha =0.2, binwidth=b)+
+    ggtitle("Unmatched: Low Dose (Red) vs High Dose(Blue) ")+
+    theme(plot.title = element_text(face="bold", size=10)) +
+    xlab(paste(string, " distribution"))+
+    coord_cartesian(ylim=c(0,75))+
+    xlim(min(data12[,i]),max(data12[,i]))
+  
+  plot2<- ggplot(data12, aes(eval(parse(text = string)))) +
+    geom_histogram(data= data12[mgen1$index.treated,],fill="red",alpha =0.2, binwidth=b)+
+    geom_histogram(data= data12[mgen1$index.control,],fill="blue",alpha =0.2, binwidth=b)+
+    ggtitle("Matched: Low Dose (Red) vs High Dose(Blue) ")+
+    theme(plot.title = element_text( face="bold", size=10)) +
+    xlab(paste(string, " distribution"))+
+    coord_cartesian(ylim=c(0,75))+
+    xlim(min(data12[,i]),max(data12[,i]))
+  
+  
+  grid.arrange(plot1, plot2, ncol=2)
+}
+```
 
+```{r}
+for (i in c(8,10,12,20,22,23)){
+  string= columns[i]
+  
+  plot1<-ggplot(data12, aes(eval(parse(text = string)))) +
+    geom_histogram(data= data12[mgen1$index.treated,],fill="red",alpha =0.2, binwidth = 0.5)+
+    geom_histogram(data= data12[-mgen1$index.treated,],fill="blue",alpha =0.2, binwidth = 0.5)+
+      ggtitle("Unmatched: Low Dose(Red) vs High Dose(Blue) ")+
+    theme(plot.title = element_text(face="bold", size=10)) +
+    xlab(paste(string, " distribution"))+
+    coord_cartesian(ylim=c(0,150))  
+  
+  plot2<- ggplot(data12, aes(eval(parse(text = string)))) +
+    geom_histogram(data= data12[mgen1$index.treated,],fill="red",alpha =0.2, binwidth = 0.5)+
+    geom_histogram(data= data12[mgen1$index.control,],fill="blue",alpha =0.2, binwidth = 0.5)+
+    ggtitle("Matched: Low Dose (Red) vs High Dose(Blue) ")+
+    theme(plot.title = element_text(face="bold", size=10)) +
+    xlab(paste(string, " distribution"))+
+    coord_cartesian(ylim=c(0,150))
+  
+  grid.arrange(plot1, plot2, ncol=2)
+}
 ```
 
 
@@ -388,9 +508,20 @@ ggplot(df, aes(x,y))+
 R2_with_replace= cor(data12$log_mean_time_MA_PA[mgen1$index.control],data12$log_mean_time_MA_PA[mgen1$index.treated])^2
 R2_with_replace
 
+
 ```
 
 ```{r}
+# library(stargazer)
+# stargazer(summary(rr1))
+```
+```{r}
+t.test(data12$sishand_change[mgen1$index.control],data12$sishand_change[mgen1$index.treated])
+t.test(data12$logwmftMA_change[mgen1$index.control],data12$logwmftMA_change[mgen1$index.treated])
+t.test(data12$logwmftLA_change[mgen1$index.control],data12$logwmftLA_change[mgen1$index.treated])
+
+multiregfit=lm(data12$sishand_change~data12$A1EstVol*data12$treat)
+
+summary(multiregfit)
 
 ```
-
