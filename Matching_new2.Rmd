@@ -11,7 +11,7 @@ knitr::opts_chunk$set(root.dir = "C:/Users/nadir/Desktop/Matching/BKN 599 Advanc
 ```
 
 
-## Matching project for evaluating effects of treatment dosage
+# Matching project for evaluating effects of treatment dosage
 
 clear workspace variables
 clear command window (same as ctrl+L. )
@@ -25,8 +25,6 @@ graphics.off()
 ```{r}
 library(tidyverse)
 library(Matching)
-# library(dummy)
-
 ```
 
 variables
@@ -40,20 +38,24 @@ Hthreshold= 30
 setwd("C:/Users/nadir/Desktop/Matching/BKN 599 Advanced Data Analysis")
 evalData=read.csv("00042_evalDataset_notext.csv")
 patChar= read.csv("PatientCharacteristics_withDose.csv")
+rawd= read.csv("Raw Data_Included Subjects Only_mod.csv", sep="\t") # neural values
 
 ```
 
-Changing column name for merging
+Changing column name for merging and creating features for stroke location
 ```{r}
-names(patChar)[6]<-paste("pid")  
+patChar=rename(patChar, pid= PID )
+patChar$RightH.Stroke= ifelse(patChar$CSstrkloc==1, 1, 0)
+patChar$LeftH.Stroke= ifelse(patChar$CSstrkloc==2, 1, 0)
+
 ```
 
 Remove sparse features/features with no use
 ```{r}
 evalData= evalData[-c(1:4, 7:203, 205:245, 247:276, 278:366, 369:376)]  
-patChar= patChar[c(6,9,12,18,19,27,29,30)]
+patChar= patChar[c(6,9,12,18,19,27,29,30,34,35)]
 ```
-Note: Leaving out FAS scores because many (18) missed values for visit 1 stats
+#### Note: Leaving out FAS scores because many (18) missed values for visit 1 stats
 
 
 Merge data
@@ -96,35 +98,37 @@ dataVisit2= subset(dataMerged, visitnum==2)
 dataVisit3 = subset(dataMerged, visitnum==3)
 ```
 
-### Removing visit2 data with missing values for NIHtotal
+### Removing subjects with missing values
 ```{r}
-dataVisit2= dataVisit2[complete.cases(dataVisit2[,5]),]
-dataVisit3= dataVisit3[complete.cases(dataVisit3[,4:5]),]
+dataVisit1= dataVisit1[complete.cases(dataVisit1),]
+dataVisit2= dataVisit2[complete.cases(dataVisit2),]
+dataVisit3= dataVisit3[complete.cases(dataVisit3),]
 ```
 
 ### Removing visit1 data with no available visit 2 features
 ```{r}
-temp= data.frame(dataVisit2$pid); 
-names(temp)[1]<-paste("pid");   #renaming column name to "pid"
-dataVisit1= merge(temp,dataVisit1)
-rm(temp)
-```
+temp1= data.frame(dataVisit1$pid); 
+names(temp1)[1]<-paste("pid");   #renaming column name to "pid"
 
-### Also Removing visit1 and visit 2 data with no available visit 3 features
-```{r}
-temp= data.frame(dataVisit3$pid); 
-names(temp)[1]<-paste("pid");   #renaming column name to "pid"
+temp2= data.frame(dataVisit2$pid); 
+names(temp2)[1]<-paste("pid");   #renaming column name to "pid"
+
+temp3= data.frame(dataVisit3$pid); 
+names(temp3)[1]<-paste("pid");   #renaming column name to "pid"
+
+temp= merge(temp1,temp2)
+temp= merge(temp, temp3)
+
 dataVisit1= merge(temp,dataVisit1)
 dataVisit2= merge(temp,dataVisit2)
-rm(temp)
+dataVisit3= merge(temp,dataVisit3)
+
+rm(temp,temp1,temp2,temp3)
 ```
 
-### Removing visit3 data with no available visit 1/2 features
-```{r}
-temp= data.frame(dataVisit1$pid); 
-names(temp)[1]<-paste("pid");   #renaming column name to "pid"
-dataVisit3= merge(temp,dataVisit3)
-rm(temp)
+```
+
+
 ```
 
 
@@ -135,21 +139,18 @@ sum(is.na(dataVisit2))
 sum(is.na(dataVisit3))
 ```
 
-### Impute missing values- is.na(dataVisit1[,i]) returns TRUE only for row index of column with NA
+### No longer imputing values. Just removing data point with missing values
+Impute missing values- is.na(dataVisit1[,i]) returns TRUE only for row index of column with NA
 ```{r}
-for(i in 2:ncol(dataVisit1)){
-  dataVisit1[is.na(dataVisit1[,i]), i] <- median(dataVisit1[,i], na.rm = TRUE)
-}  
-for(i in 2:ncol(dataVisit2)){
-  dataVisit2[is.na(dataVisit2[,i]), i] <- median(dataVisit2[,i], na.rm = TRUE)
-}
+# for(i in 2:ncol(dataVisit1)){
+#   dataVisit1[is.na(dataVisit1[,i]), i] <- median(dataVisit1[,i], na.rm = TRUE)
+# }  
+# for(i in 2:ncol(dataVisit2)){
+#   dataVisit2[is.na(dataVisit2[,i]), i] <- median(dataVisit2[,i], na.rm = TRUE)
+# }
 ```
-### Check number of missing values AGAIN
-```{r}
-sum(is.na(dataVisit1))
-sum(is.na(dataVisit2))
-sum(is.na(dataVisit3))
-```
+
+
 ### Creating new dataset for future calculations
 ```{r}
 data12= dataVisit1
@@ -157,7 +158,7 @@ data12= dataVisit1
 #### Note: The Low Dose group is the treated group, and High Dose is the control group for matching
 creating binary variable indicating whether subject belongs in Low Dose or High Dose group  
 ```{r}
-data12$treat=ifelse(dataVisit1$dose_hours<=Lthreshold, 1, 0)
+data12$treat=ifelse(dataVisit1$dose_hours<=27, 1, 0)
 ```
 
 
@@ -188,20 +189,24 @@ data12$logwmftLA_retentionv23= dataVisit3$log_mean_time_LA_PA-dataVisit2$log_mea
 # If we further include the datasets raw data and icareupdate
 
 ```{r}
-setwd("C:/Users/nadir/Desktop/Matching/BKN 599 Advanced Data Analysis")
-rawd= read.csv("Raw Data_Included Subjects Only_mod.csv", sep="\t")
+
 
 #Note that for the raw dataset, A1Diameter and A1x values are the exact same
 rawd$multlesions= as.integer(rawd$A2x!="\\N")
 rawd= rawd[c(1,7,13, 107, 143)];
 rawd$old_stroke= as.integer(rawd$old_stroke)-1
-rawd$stroketype= as.integer(rawd$stroketype)-1
-names(rawd)[1]<-paste("pid");   #renaming column name to "pid"
+
+rawd=rename(rawd, pid= Study_id ) #renaming column name
 rawd$pid =toupper(rawd$pid)
-names(rawd)[2]<-paste("ischemic");   #renaming column name to "pid"
+
+rawd$stroketype= as.integer(rawd$stroketype)-1
+rawd=rename(rawd, Ischemic= stroketype ) #renaming column name
+
+rawd$A1EstVol= log2(rawd$A1EstVol+1)
+rawd=rename(rawd, log2.A1EstVol= A1EstVol ) #renaming column name
 
 data12= merge(rawd,data12, by = "pid")
-
+data12= data12[-c(6)] #Removing visitnumber column
 ```
 
 
@@ -212,10 +217,8 @@ lowdosegroup= subset(data12, treat==1)
 ```
 
 
-
 #### WE WILL NOT USE THE LAST ICARE UPDATE DATA-SET AS IT WILL SLASH our data-points by 60%
 ```{r}
-
 # icareupdate= read.csv("icare results update.csv")
 # names(icareupdate)[1]<-paste("pid");   #renaming column name to "pid"
 # 
@@ -228,16 +231,17 @@ lowdosegroup= subset(data12, treat==1)
 
 
 
-### Propensity Score Matching code starts here (Youtube tutorial used)
+### Propensity Score Matching code starts here
 
 creates a marrix from columns/features
 ```{r}
-X= cbind(data12$SIS_hand, data12$ufugm,data12$CSgender,data12$NIHtot, 
+X= cbind(data12$SIS_hand, data12$ufugm, data12$CSgender, data12$NIHtot, 
          data12$log_mean_time_MA_PA, data12$log_mean_time_LA_PA,
-         data12$severity, data12$onset_to_rand, data12$age_at_rand,
+         data12$severity, data12$LeftH.Stroke, data12$RightH.Stroke,
+         data12$onset_to_rand, data12$age_at_rand,
          data12$concordance, data12$finished_college, 
          #New variables from neural data
-         data12$ischemic,data12$A1EstVol, data12$old_stroke, data12$multlesions)
+         data12$Ischemic, data12$log2.A1EstVol, data12$old_stroke, data12$multlesions)
 
 ```
 
@@ -245,14 +249,12 @@ X= cbind(data12$SIS_hand, data12$ufugm,data12$CSgender,data12$NIHtot,
 ### Calculating the propensity score
 Generalized linear models are fit using the glm( ) function.
 treat ~ X means treat is the response of all other variables
-treat is a binary factor and
-Family objects provide a convenient way to specify the details of the models used by functions such as glm
-family= binomial() performs Logistic Regression
+treat is a binary factor and Family objects provide a convenient way to specify the details of the models used by functions such as glm
+family= binomial() specifies that Logistic Regression is to be performed
 
 
 ```{r}
-model <- glm(treat ~ X, 
-             family = binomial(), data = data12 )
+model <- glm(treat ~ X,    family = binomial(), data = data12 )
 ```
 
 Subjects are more likely to be in treated (Low Dose) group if "Estimate" values are positive
@@ -299,27 +301,26 @@ rr1 =Match(Tr= data12$treat, X= model$fitted.values, estimand = "ATT",
 ### Exploring propensity score distributions
 
 ```{r}
-datap= data12
-datap$propscore= model$fitted.values
+data12$propscore= model$fitted.values
 
 library(gridExtra)
 
-plot1<-ggplot(datap, aes(propscore)) +
-  geom_histogram(data = subset(datap,treat == '1'),fill = "red", alpha = 0.2,binwidth=0.04)+
-  geom_histogram(data = subset(datap,treat == '0'),fill = "blue", alpha = 0.2,binwidth=0.04)+
-  geom_density(data = subset(datap,treat == '1'),fill = "red", alpha = 0.2)+
-  geom_density(data = subset(datap,treat == '0'),fill = "blue", alpha = 0.2)+
+plot1<-ggplot(data12, aes(propscore)) +
+  geom_histogram(data = subset(data12,treat == '1'),fill = "red", alpha = 0.2,binwidth=0.04)+
+  geom_histogram(data = subset(data12,treat == '0'),fill = "blue", alpha = 0.2,binwidth=0.04)+
+  geom_density(data = subset(data12,treat == '1'),fill = "red", alpha = 0.2)+
+  geom_density(data = subset(data12,treat == '0'),fill = "blue", alpha = 0.2)+
   ggtitle("Unmatched: Low Dose Patients (Red) vs High Dose Patients (Blue)")+
   xlab("Probability of being in Low Dose group given covariates")+
   xlim(c(0,1))+
   ylim(c(0,27))
 
 
-plot2<-ggplot(datap, aes(propscore)) +
-  geom_histogram(data= datap[rr1$index.treated,],fill = "red", alpha = 0.2,binwidth=0.04)+
-  geom_histogram(data= datap[rr1$index.control,],fill = "blue", alpha = 0.2,binwidth=0.04)+
-  geom_density(data = datap[rr1$index.treated,],fill = "red", alpha = 0.2)+
-  geom_density(data = datap[rr1$index.control,],fill = "blue", alpha = 0.2)+
+plot2<-ggplot(data12, aes(propscore)) +
+  geom_histogram(data= data12[rr1$index.treated,],fill = "red", alpha = 0.2,binwidth=0.04)+
+  geom_histogram(data= data12[rr1$index.control,],fill = "blue", alpha = 0.2,binwidth=0.04)+
+  geom_density(data = data12[rr1$index.treated,],fill = "red", alpha = 0.2)+
+  geom_density(data = data12[rr1$index.control,],fill = "blue", alpha = 0.2)+
   ggtitle("Matched: Low Dose Patients (Red) vs  High Dose Patients (Blue)")+
   xlab("Probability of being in Low Dose group given covariates")+
   xlim(c(0,1))+
@@ -353,9 +354,10 @@ The number of bootstrap samples to be run. If zero, no bootstraps are done. Boot
 ```{r}
 MatchBalance(treat~ SIS_hand + ufugm + NIHtot + log_mean_time_MA_PA +
                log_mean_time_LA_PA +CSgender+ concordance + severity + 
-               onset_to_rand + finished_college + age_at_rand +ischemic +
-               A1EstVol+ old_stroke+ multlesions+propscore,
-             match.out= rr1, nboots=100,data= datap)
+               onset_to_rand + finished_college + age_at_rand +
+               Ischemic + log2.A1EstVol+ old_stroke+ multlesions + 
+               LeftH.Stroke + RightH.Stroke + propscore,
+             match.out= rr1, nboots=100,data= data12)
 
 ```
 
@@ -401,7 +403,7 @@ Genoud is a function that combines evolutionary search algorithms with derivativ
 # Adding propensity score to estimation
 X1 = cbind(X,model$fitted.values)
 
-gen1 = GenMatch(Tr= data12$treat, X=X1, pop.size=10000, replace=TRUE, max.weight=1);
+gen1 = GenMatch(Tr= data12$treat, X=X1, pop.size=1000, replace=TRUE, max.weight=1);
 mgen1=Match(Tr=data12$treat, X=X1, Weight.matrix = gen1);
 
 ```
@@ -412,16 +414,17 @@ mgen1=Match(Tr=data12$treat, X=X1, Weight.matrix = gen1);
 ####Summary of the model will tell us about Causal relationship
 ```{r}
 summary(mgen1)
-
 ```
 
 
 #### Assessing balance
 ```{r}
-print(MatchBalance(treat~ SIS_hand + ufugm + NIHtot + log_mean_time_MA_PA +
+MatchBalance(treat~ SIS_hand + ufugm + NIHtot + log_mean_time_MA_PA +
                log_mean_time_LA_PA +CSgender+ concordance + severity + 
-               onset_to_rand + finished_college + age_at_rand,
-             data= data12, match.out= mgen1, nboots=0))
+               onset_to_rand + finished_college + age_at_rand+
+               Ischemic + log2.A1EstVol+ LeftH.Stroke + RightH.Stroke +
+               old_stroke+ multlesions + propscore,
+               data= data12, match.out= mgen1, nboots=0)
 
 ```
 ####Further assessing balance- Plotting matched values for SIS Hand and Log mean time for WMFT
@@ -446,7 +449,7 @@ length(unique(mgen1$index.control))
 
 ```{r}
 columns = colnames(data12)
-for (i in c(3,7:11,13,15,17)){
+for (i in c(3,7:11,13,15,17,30)){
   string= columns[i]
   
   b= max(data12[,i])/25
@@ -476,7 +479,7 @@ for (i in c(3,7:11,13,15,17)){
 
 
 ```{r}
-for (i in c(2,4,5,12,14,16)){
+for (i in c(2,4,5,12,14,16,18,19)){
   string= columns[i]
   
   plot1<-ggplot(data12, aes(eval(parse(text = string)))) +
@@ -506,9 +509,25 @@ R2_with_replace= cor(data12$log_mean_time_MA_PA[mgen1$index.control],data12$log_
 R2_with_replace
 
 ```
-
+## Ttests
 ```{r}
-library(stargazer)
-stargazer(summary(rr1))
+t.test(data12$logwmftMA_change[mgen1$index.treated],data12$logwmftMA_change[mgen1$index.control])
+t.test(data12$sishand_change[mgen1$index.treated],data12$sishand_change[mgen1$index.control])
+
+t.test(data12$logwmftMA_retentionv23[mgen1$index.treated],data12$logwmftMA_retentionv23[mgen1$index.control])
+t.test(data12$sishand_retentionv23[mgen1$index.treated],data12$sishand_retentionv23[mgen1$index.control])
+
 ```
 
+```{r}
+hist(data12$logwmftMA_change[mgen1$index.treated])
+hist(data12$logwmftMA_change[mgen1$index.control])
+shapiro.test(data12$logwmftMA_change[mgen1$index.treated])
+
+# 
+# install.packages("PerformanceAnlaytics")
+# library("PerformanceAnalytics")
+# chart.Correlation(data12)
+
+cor(as.matrix(data12[,2:28]))
+```
