@@ -22,9 +22,12 @@ cat("\014")
 graphics.off() 
 ```
 
+
 ```{r}
 library(tidyverse)
 library(Matching)
+library(cobalt)
+library(pander)
 ```
 
 variables
@@ -42,7 +45,8 @@ rawd= read.csv("Raw Data_Included Subjects Only_mod.csv", sep="\t") # neural val
 
 ```
 
-Changing column name for merging and creating features for stroke location
+
+### Changing column name for merging and creating features for stroke location
 ```{r}
 patChar=rename(patChar, pid= PID )
 patChar$RightH.Stroke= ifelse(patChar$CSstrkloc==1, 1, 0)
@@ -50,9 +54,36 @@ patChar$LeftH.Stroke= ifelse(patChar$CSstrkloc==2, 1, 0)
 
 ```
 
+### Coding all -99 values as missing data
+```{r}
+evalData[evalData == -99] <- NA;
+patChar[(patChar ==-99)|(patChar ==-7)|(patChar ==-8)|(patChar ==-9)] <- NA;
+rawd[rawd ==-1] <- NA;
+```
+
+
+### Removing subsidiary/redundant evaldata features
+### Examining Matchnig features from EvalData visit 1 scores
+```{r}
+# evalData.cnames= data.frame(colnames(evalData))
+evalData1 = evalData[c(5,6,120,128,204,246,260,277,367,368,371,372,376)]
+evalData1= evalData1[evalData1$visitnum==1,]
+summary(evalData1)
+evalData1=evalData1[complete.cases(evalData1),]
+evalD.correlations= data.frame(cor(evalData1[-c(1,2)]))
+```
+
+## Dummy datasets-------------------------------------------------
+```{r}
+evalData1= evalData[-c(1:4, 7:203, 205:245, 247:276, 278:366, 369:375)] 
+patChar1= patChar[c(3,6,8:10, 12:24,27:32)]
+extrafeat= dataMerged= merge(evalData1,patChar1)
+```
+
+
 Remove sparse features/features with no use
 ```{r}
-evalData= evalData[-c(1:4, 7:203, 205:245, 247:276, 278:366, 369:376)]  
+evalData= evalData[-c(1:4, 7:203, 205:245, 247:276, 278:366, 369:376)]
 patChar= patChar[c(6,9,12,18,19,27,29,30,34,35)]
 ```
 #### Note: Leaving out FAS scores because many (18) missed values for visit 1 stats
@@ -71,11 +102,6 @@ dataMerged$DEMOedu=NULL
 ```
 
 
-Replace -99 with missing values
-```{r}
-dataMerged[dataMerged == -99] <- NA
-```
-
 
 Changing table to numeric
 ```{r}
@@ -93,7 +119,7 @@ dataMerged=dataMerged[dataMerged$dose_hours>=Hthreshold | dataMerged$dose_hours<
 
 ### Extract visit datas
 ```{r}
-dataVisit1= subset(dataMerged, visitnum==1)                        
+dataVisit1= subset(dataMerged, visitnum==1)                       
 dataVisit2= subset(dataMerged, visitnum==2)       
 dataVisit3 = subset(dataMerged, visitnum==3)
 ```
@@ -126,10 +152,6 @@ dataVisit3= merge(temp,dataVisit3)
 rm(temp,temp1,temp2,temp3)
 ```
 
-```
-
-
-```
 
 
 ### Check number of missing values
@@ -139,16 +161,6 @@ sum(is.na(dataVisit2))
 sum(is.na(dataVisit3))
 ```
 
-### No longer imputing values. Just removing data point with missing values
-Impute missing values- is.na(dataVisit1[,i]) returns TRUE only for row index of column with NA
-```{r}
-# for(i in 2:ncol(dataVisit1)){
-#   dataVisit1[is.na(dataVisit1[,i]), i] <- median(dataVisit1[,i], na.rm = TRUE)
-# }  
-# for(i in 2:ncol(dataVisit2)){
-#   dataVisit2[is.na(dataVisit2[,i]), i] <- median(dataVisit2[,i], na.rm = TRUE)
-# }
-```
 
 
 ### Creating new dataset for future calculations
@@ -162,13 +174,6 @@ data12$treat=ifelse(dataVisit1$dose_hours<=27, 1, 0)
 ```
 
 
-
-### Normalization not necessary because genetic matching involves a modified mahalanobis distance- normalize by subtracting mean and dividing by std (doing min-max instead)
-```{r}
-# for(i in 2:(ncol(data12)-1)){
-#   data12[,i] <- (data12[,i]-mean(data12[,i]))/(max(data12[,i])-min(data12[,i]))
-# }
-```
 
 ### Creating change parameters from differences in visit2 and vist 1
 ```{r}
@@ -188,16 +193,40 @@ data12$logwmftLA_retentionv23= dataVisit3$log_mean_time_LA_PA-dataVisit2$log_mea
 
 # If we further include the datasets raw data and icareupdate
 
+#renaming column name
 ```{r}
+rawd=rename(rawd, pid= Study_id ) 
+rawd$pid =toupper(rawd$pid)
+
+```
+
+#### EXTRA------------
+```{r}
+rawd2= rawd[c(1,4,7:14,27,31,32,79,133,134)]
+dataEXTRA= merge(rawd2,data12[,1:2], by = "pid")
+dataEXTRA=dataEXTRA[-c(17)]
+extraF= subset(extrafeat, visitnum<2) 
+dataEXTRA= merge(extraF, dataEXTRA, by = "pid")
+dataEXTRA=dataEXTRA[-c(2,13,14)]
+dataEXTRA$FCtotalOT=as.numeric(paste(dataEXTRA$FCtotalOT))
+dataEXTRA[dataEXTRA == -99] <- NA
+# Converting to factors
+
+fnames <- c(8:12,14:22,24,25,27,28,39)
+dataEXTRA[,fnames] <- lapply(dataEXTRA[,fnames] , factor)
 
 
+pander(summary(dataEXTRA))
+```
+
+
+
+```{r}
 #Note that for the raw dataset, A1Diameter and A1x values are the exact same
 rawd$multlesions= as.integer(rawd$A2x!="\\N")
 rawd= rawd[c(1,7,13, 107, 143)];
 rawd$old_stroke= as.integer(rawd$old_stroke)-1
 
-rawd=rename(rawd, pid= Study_id ) #renaming column name
-rawd$pid =toupper(rawd$pid)
 
 rawd$stroketype= as.integer(rawd$stroketype)-1
 rawd=rename(rawd, Ischemic= stroketype ) #renaming column name
@@ -216,18 +245,6 @@ highdosegroup= subset(data12, treat==0)
 lowdosegroup= subset(data12, treat==1)
 ```
 
-
-#### WE WILL NOT USE THE LAST ICARE UPDATE DATA-SET AS IT WILL SLASH our data-points by 60%
-```{r}
-# icareupdate= read.csv("icare results update.csv")
-# names(icareupdate)[1]<-paste("pid");   #renaming column name to "pid"
-# 
-# temp= data.frame(icareupdate$pid)
-# names(temp)[1]<-paste("pid");   #renaming column name to "pid"
-# 
-# datarm= merge(temp,datarm, by = "pid")
-
-```
 
 
 
@@ -301,34 +318,37 @@ rr1 =Match(Tr= data12$treat, X= model$fitted.values, estimand = "ATT",
 ### Exploring propensity score distributions
 
 ```{r}
-data12$propscore= model$fitted.values
+data12$propensity.score= model$fitted.values
 
 library(gridExtra)
 
-plot1<-ggplot(data12, aes(propscore)) +
+plot1<-ggplot(data12, aes(propensity.score)) +
   geom_histogram(data = subset(data12,treat == '1'),fill = "red", alpha = 0.2,binwidth=0.04)+
   geom_histogram(data = subset(data12,treat == '0'),fill = "blue", alpha = 0.2,binwidth=0.04)+
   geom_density(data = subset(data12,treat == '1'),fill = "red", alpha = 0.2)+
   geom_density(data = subset(data12,treat == '0'),fill = "blue", alpha = 0.2)+
-  ggtitle("Unmatched: Low Dose Patients (Red) vs High Dose Patients (Blue)")+
-  xlab("Probability of being in Low Dose group given covariates")+
+  ggtitle("Low Dose (Red) vs Unmatched High Dose(Blue)")+
+  xlab("P(Subject in Low Dose group | covariates)")+
   xlim(c(0,1))+
-  ylim(c(0,27))
+  ylim(c(0,23))+
+  theme(plot.title = element_text(size = 10, face = "bold"))
 
 
-plot2<-ggplot(data12, aes(propscore)) +
+
+plot2<-ggplot(data12, aes(propensity.score)) +
   geom_histogram(data= data12[rr1$index.treated,],fill = "red", alpha = 0.2,binwidth=0.04)+
   geom_histogram(data= data12[rr1$index.control,],fill = "blue", alpha = 0.2,binwidth=0.04)+
   geom_density(data = data12[rr1$index.treated,],fill = "red", alpha = 0.2)+
   geom_density(data = data12[rr1$index.control,],fill = "blue", alpha = 0.2)+
-  ggtitle("Matched: Low Dose Patients (Red) vs  High Dose Patients (Blue)")+
-  xlab("Probability of being in Low Dose group given covariates")+
+  ggtitle("Low Dose (Red) vs Matched High Dose(Blue)")+
+  xlab("P(Subject in Low Dose group | covariates)")+
   xlim(c(0,1))+
-  ylim(c(0,27))
+  ylim(c(0,23))+
+  theme(plot.title = element_text(size = 10, face = "bold"))
 
 
 
-grid.arrange(plot1, plot2, ncol=2)
+  grid.arrange(plot1, plot2, ncol=2)
 
 ```
 
@@ -356,17 +376,12 @@ MatchBalance(treat~ SIS_hand + ufugm + NIHtot + log_mean_time_MA_PA +
                log_mean_time_LA_PA +CSgender+ concordance + severity + 
                onset_to_rand + finished_college + age_at_rand +
                Ischemic + log2.A1EstVol+ old_stroke+ multlesions + 
-               LeftH.Stroke + RightH.Stroke + propscore,
+               LeftH.Stroke + RightH.Stroke + propensity.score,
              match.out= rr1, nboots=100,data= data12)
 
 ```
 
 
-####Summary of the model will tell us about Causal relationship on picked Y after Matching
-
-```{r}
-summary(rr1) 
-```
 
 ####Further assessing balance- Plotting matched values for SIS Hand and Log mean time for WMFT
 ```{r}
@@ -382,6 +397,73 @@ abline(coef=c(0,1),col=2)
 length(unique(rr1$index.treated))
 length(unique(rr1$index.control))
 ```
+
+
+## Cobalt package for assessing balance
+```{r}
+
+
+set.cobalt.options(continuous= "std",binary= "std")
+
+(bal.tab(rr1, treat ~ SIS_hand + ufugm + NIHtot + log_mean_time_MA_PA +
+               log_mean_time_LA_PA +CSgender+ concordance + severity + 
+               onset_to_rand + finished_college + age_at_rand +
+               Ischemic + log2.A1EstVol+ old_stroke+ multlesions + 
+               LeftH.Stroke + RightH.Stroke,disp.v.ratio = TRUE, data = data12, 
+              abs= TRUE, m.threshold =0.1))
+
+```
+
+
+Visualizing Balance
+
+```{r}
+columns = colnames(data12)
+for (i in c(3,7:10,14,16,29)){
+  string= columns[i]
+  
+  b= max(data12[,i])/25
+  
+  plot1<-ggplot(data12, aes(eval(parse(text = string)))) +
+    geom_histogram(data= data12[rr1$index.treated,],fill="red",alpha =0.2, binwidth=b)+
+    geom_histogram(data= data12[-rr1$index.treated,],fill="blue",alpha =0.2, binwidth=b)+
+    ggtitle("Low Dose(Red) vs Unmatched High Dose(Blue)")+
+    theme(plot.title = element_text(face="bold", size=10)) +
+    xlab(paste(string, "histogram"))+
+    coord_cartesian(ylim=c(0,40))+
+    xlim(min(data12[,i]),max(data12[,i]))
+  
+  plot2<- ggplot(data12, aes(eval(parse(text = string)))) +
+    geom_histogram(data= data12[rr1$index.treated,],fill="red",alpha =0.2, binwidth=b)+
+    geom_histogram(data= data12[rr1$index.control,],fill="blue",alpha =0.2, binwidth=b)+
+    ggtitle("Low Dose (Red) vs Matched High Dose(Blue)")+
+    theme(plot.title = element_text( face="bold", size=10)) +
+    xlab(paste(string, "histogram"))+
+    coord_cartesian(ylim=c(0,40))+
+    xlim(min(data12[,i]),max(data12[,i]))
+  
+   plot3<-ggplot(data12, aes(eval(parse(text = string)))) +
+    geom_density(data = data12[rr1$index.treated,],fill = "red", alpha = 0.2)+
+    geom_density(data = data12[-rr1$index.treated,],fill = "blue", alpha = 0.2)+
+    ggtitle("Low Dose(Red) vs Unmatched High Dose(Blue)")+
+    theme(plot.title = element_text(face="bold", size=10)) +
+    xlab(paste(string, "density"))+
+    xlim(min(data12[,i]),max(data12[,i]))
+   
+   plot4<-ggplot(data12, aes(eval(parse(text = string)))) +
+    geom_density(data = data12[rr1$index.treated,],fill = "red", alpha = 0.2)+
+    geom_density(data = data12[rr1$index.control,],fill = "blue", alpha = 0.2)+
+    ggtitle("Low Dose(Red) vs Unmatched High Dose(Blue)")+
+    theme(plot.title = element_text(face="bold", size=10)) +
+    xlab(paste(string, "density"))+
+    xlim(min(data12[,i]),max(data12[,i]))
+  
+  grid.arrange(plot1, plot2, plot3,plot4, ncol=2, nrow=2)
+}
+
+```
+
+
 
 ### Genetic matching 
 This function finds optimal balance using multivariate matching where a genetic search algorithm determines the weight each covariate is given. Balance is determined by examining cumulative probability distribution functions of a variety of standardized statistics. By default, these statistics include t-tests and Kolmogorov-Smirnov tests. A variety of descriptive statistics based on empirical-QQ (eQQ) plots can also be used or any user provided measure of balance. The statistics are not used to conduct formal hypothesis tests, because no measure of balance is a monotonic function of bias and because balance should be maximized without limit. The object returned by GenMatch can be supplied to the Match function (via the Weight.matrix option) to obtain causal estimates. GenMatch uses **GENoud** to perform the genetic search. 
@@ -401,9 +483,9 @@ Genoud is a function that combines evolutionary search algorithms with derivativ
 
 ```{r}
 # Adding propensity score to estimation
-X1 = cbind(X,model$fitted.values)
+X1 = cbind(X,data12$propensity.score)
 
-gen1 = GenMatch(Tr= data12$treat, X=X1, pop.size=1000, replace=TRUE, max.weight=1);
+gen1 = GenMatch(Tr= data12$treat, X=X1, pop.size=10000, replace=TRUE, max.weight=1);
 mgen1=Match(Tr=data12$treat, X=X1, Weight.matrix = gen1);
 
 ```
@@ -423,10 +505,13 @@ MatchBalance(treat~ SIS_hand + ufugm + NIHtot + log_mean_time_MA_PA +
                log_mean_time_LA_PA +CSgender+ concordance + severity + 
                onset_to_rand + finished_college + age_at_rand+
                Ischemic + log2.A1EstVol+ LeftH.Stroke + RightH.Stroke +
-               old_stroke+ multlesions + propscore,
+               old_stroke+ multlesions + propensity.score,
                data= data12, match.out= mgen1, nboots=0)
 
+
 ```
+
+
 ####Further assessing balance- Plotting matched values for SIS Hand and Log mean time for WMFT
 ```{r}
 
@@ -445,11 +530,19 @@ length(unique(mgen1$index.treated))
 length(unique(mgen1$index.control))
 ```
 
+```{r}
+(bal.tab(mgen1, treat ~ SIS_hand + ufugm + NIHtot + log_mean_time_MA_PA +
+               log_mean_time_LA_PA +CSgender+ concordance + severity + 
+               onset_to_rand + finished_college + age_at_rand +
+               Ischemic + log2.A1EstVol+ old_stroke+ multlesions + 
+               LeftH.Stroke + RightH.Stroke + propensity.score,disp.v.ratio = TRUE, data = data12, 
+              abs= TRUE, m.threshold =0.1))
+```
 
 
 ```{r}
 columns = colnames(data12)
-for (i in c(3,7:11,13,15,17,30)){
+for (i in c(3,7:10,14,16,29)){
   string= columns[i]
   
   b= max(data12[,i])/25
@@ -457,51 +550,76 @@ for (i in c(3,7:11,13,15,17,30)){
   plot1<-ggplot(data12, aes(eval(parse(text = string)))) +
     geom_histogram(data= data12[mgen1$index.treated,],fill="red",alpha =0.2, binwidth=b)+
     geom_histogram(data= data12[-mgen1$index.treated,],fill="blue",alpha =0.2, binwidth=b)+
-    ggtitle("Unmatched: Low Dose (Red) vs High Dose(Blue) ")+
+    ggtitle("Low Dose(Red) vs Unmatched High Dose(Blue)")+
     theme(plot.title = element_text(face="bold", size=10)) +
-    xlab(paste(string, " distribution"))+
-    coord_cartesian(ylim=c(0,75))+
+    xlab(paste(string, "histogram"))+
+    coord_cartesian(ylim=c(0,35))+
     xlim(min(data12[,i]),max(data12[,i]))
   
   plot2<- ggplot(data12, aes(eval(parse(text = string)))) +
     geom_histogram(data= data12[mgen1$index.treated,],fill="red",alpha =0.2, binwidth=b)+
     geom_histogram(data= data12[mgen1$index.control,],fill="blue",alpha =0.2, binwidth=b)+
-    ggtitle("Matched: Low Dose (Red) vs High Dose(Blue) ")+
+    ggtitle("Low Dose(Red) vs Matched High Dose(Blue)")+
     theme(plot.title = element_text( face="bold", size=10)) +
-    xlab(paste(string, " distribution"))+
-    coord_cartesian(ylim=c(0,75))+
+    xlab(paste(string, "histogram"))+
+    coord_cartesian(ylim=c(0,35))+
     xlim(min(data12[,i]),max(data12[,i]))
   
-  grid.arrange(plot1, plot2, ncol=2)
+   plot3<-ggplot(data12, aes(eval(parse(text = string)))) +
+    geom_density(data = data12[mgen1$index.treated,],fill = "red", alpha = 0.2)+
+    geom_density(data = data12[-mgen1$index.treated,],fill = "blue", alpha = 0.2)+
+    ggtitle("Low Dose(Red) vs Unmatched High Dose(Blue)")+
+    theme(plot.title = element_text(face="bold", size=10)) +
+    xlab(paste(string, "density"))+
+    xlim(min(data12[,i]),max(data12[,i]))
+   
+   plot4<-ggplot(data12, aes(eval(parse(text = string)))) +
+    geom_density(data = data12[mgen1$index.treated,],fill = "red", alpha = 0.2)+
+    geom_density(data = data12[mgen1$index.control,],fill = "blue", alpha = 0.2)+
+    ggtitle("Low Dose(Red) vs Matched High Dose(Blue)")+
+    theme(plot.title = element_text(face="bold", size=10)) +
+    xlab(paste(string, "density"))+
+    xlim(min(data12[,i]),max(data12[,i]))
+  
+  grid.arrange(plot1, plot2, plot3, plot4, ncol=2, nrow=2)
 }
 
 ```
 
 
 ```{r}
-for (i in c(2,4,5,12,14,16,18,19)){
+for (i in c(2,4,5,13,15,17,18,19)){
   string= columns[i]
   
   plot1<-ggplot(data12, aes(eval(parse(text = string)))) +
     geom_histogram(data= data12[mgen1$index.treated,],fill="red",alpha =0.2, binwidth = 0.5)+
     geom_histogram(data= data12[-mgen1$index.treated,],fill="blue",alpha =0.2, binwidth = 0.5)+
-      ggtitle("Unmatched: Low Dose(Red) vs High Dose(Blue) ")+
+    ggtitle("Low Dose(Red) vs Unmatched High Dose(Blue)")+
     theme(plot.title = element_text(face="bold", size=10)) +
-    xlab(paste(string, " distribution"))+
+    xlab(paste(string, "histogram"))+
     coord_cartesian(ylim=c(0,150))  
   
   plot2<- ggplot(data12, aes(eval(parse(text = string)))) +
     geom_histogram(data= data12[mgen1$index.treated,],fill="red",alpha =0.2, binwidth = 0.5)+
     geom_histogram(data= data12[mgen1$index.control,],fill="blue",alpha =0.2, binwidth = 0.5)+
-    ggtitle("Matched: Low Dose (Red) vs High Dose(Blue) ")+
+    ggtitle("Low Dose(Red) vs Mmatched High Dose(Blue)")+
     theme(plot.title = element_text(face="bold", size=10)) +
-    xlab(paste(string, " distribution"))+
+    xlab(paste(string, "histogram"))+
     coord_cartesian(ylim=c(0,150))
   
   grid.arrange(plot1, plot2, ncol=2)
 }
 ```
 
+####Further assessing balance- Plotting matched values for SIS Hand and Log mean time for WMFT
+```{r}
+qqplot(data12$SIS_hand[mgen1$index.control],data12$SIS_hand[mgen1$index.treated])
+abline(coef=c(0,1),col=2)
+
+qqplot(data12$log_mean_time_MA_PA[mgen1$index.control],data12$log_mean_time_MA_PA[mgen1$index.treated])
+abline(coef=c(0,1),col=2)
+
+```
 
 #### Checking the correlation
 ```{r}
@@ -509,25 +627,52 @@ R2_with_replace= cor(data12$log_mean_time_MA_PA[mgen1$index.control],data12$log_
 R2_with_replace
 
 ```
-## Ttests
-```{r}
-t.test(data12$logwmftMA_change[mgen1$index.treated],data12$logwmftMA_change[mgen1$index.control])
-t.test(data12$sishand_change[mgen1$index.treated],data12$sishand_change[mgen1$index.control])
 
-t.test(data12$logwmftMA_retentionv23[mgen1$index.treated],data12$logwmftMA_retentionv23[mgen1$index.control])
-t.test(data12$sishand_retentionv23[mgen1$index.treated],data12$sishand_retentionv23[mgen1$index.control])
+```{r}
+ MatchBalance(treat~ SIS_hand + ufugm + NIHtot + log_mean_time_MA_PA +
+               log_mean_time_LA_PA +CSgender+ concordance + severity + 
+               onset_to_rand + finished_college + age_at_rand+
+               Ischemic + log2.A1EstVol+ LeftH.Stroke + RightH.Stroke +
+               old_stroke+ multlesions + propensity.score,
+               data= data12, match.out= mgen1, nboots=0)
+
 
 ```
 
+
+
+## Checking normality
 ```{r}
-hist(data12$logwmftMA_change[mgen1$index.treated])
-hist(data12$logwmftMA_change[mgen1$index.control])
+
+library("ggpubr")
+#not normal if p is <0.05
+
 shapiro.test(data12$logwmftMA_change[mgen1$index.treated])
+shapiro.test(data12$logwmftMA_change[mgen1$index.control])
 
-# 
-# install.packages("PerformanceAnlaytics")
-# library("PerformanceAnalytics")
-# chart.Correlation(data12)
+shapiro.test(data12$logwmftMA_retentionv23[mgen1$index.treated])
+shapiro.test(data12$logwmftMA_retentionv23[mgen1$index.control])
 
-cor(as.matrix(data12[,2:28]))
+shapiro.test(data12$sishand_change[mgen1$index.treated])
+shapiro.test(data12$sishand_change[mgen1$index.control])
+
+shapiro.test(data12$sishand_retentionv23[mgen1$index.treated])
+shapiro.test(data12$sishand_retentionv23[mgen1$index.control])
+
+
+# cor(as.matrix(data12[,2:28]))
+```
+
+## Ttests
+```{r}
+
+t.test(data12$sishand_change[mgen1$index.treated],data12$sishand_change[mgen1$index.control])
+
+wilcox.test(data12$sishand_retentionv23[mgen1$index.treated],data12$sishand_retentionv23[mgen1$index.control])
+
+wilcox.test(data12$logwmftMA_change[mgen1$index.treated],data12$logwmftMA_change[mgen1$index.control])
+
+wilcox.test(data12$logwmftMA_retentionv23[mgen1$index.treated],data12$logwmftMA_retentionv23[mgen1$index.control])
+
+
 ```
