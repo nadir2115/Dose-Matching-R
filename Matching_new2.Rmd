@@ -46,14 +46,6 @@ rawd= read.csv("Raw Data_Included Subjects Only_mod.csv", sep="\t") # neural val
 ```
 
 
-### Changing column name for merging and creating features for stroke location
-```{r}
-patChar=rename(patChar, pid= PID )
-patChar$RightH.Stroke= ifelse(patChar$CSstrkloc==1, 1, 0)
-patChar$LeftH.Stroke= ifelse(patChar$CSstrkloc==2, 1, 0)
-
-```
-
 ### Coding all -99 values as missing data
 ```{r}
 evalData[evalData == -99] <- NA;
@@ -65,12 +57,14 @@ rawd[rawd ==-1] <- NA;
 ### Removing subsidiary/redundant evaldata features
 ### Examining Matchnig features from EvalData visit 1 scores
 ```{r}
-# evalData.cnames= data.frame(colnames(evalData))
-evalData1 = evalData[c(5,6,120,128,204,246,260,277,367,368,371,372,376)]
-evalData1= evalData1[evalData1$visitnum==1,]
-summary(evalData1)
-evalData1=evalData1[complete.cases(evalData1),]
-evalD.correlations= data.frame(cor(evalData1[-c(1,2)]))
+evalData.cnames= data.frame(colnames(evalData))
+pc.cnames= data.frame(colnames(patChar))
+
+# evalData1 = evalData[c(5,6,120,128,204,246,260,277,367,368,371,372,376)]
+# evalData1= evalData1[evalData1$visitnum==1,]
+# summary(evalData1)
+# evalData1=evalData1[complete.cases(evalData1),]
+# evalD.correlations= data.frame(cor(evalData1[-c(1,2)]))
 ```
 
 ## Dummy datasets-------------------------------------------------
@@ -83,10 +77,21 @@ extrafeat= dataMerged= merge(evalData1,patChar1)
 
 Remove sparse features/features with no use
 ```{r}
-evalData= evalData[-c(1:4, 7:203, 205:245, 247:276, 278:366, 369:376)]
-patChar= patChar[c(6,9,12,18,19,27,29,30,34,35)]
-```
+evalData = evalData[c(5,6,120,128,204,246,260,277,367,368,371,372)]
 #### Note: Leaving out FAS scores because many (18) missed values for visit 1 stats
+patChar= patChar[c(3,6,7,12,15:21,27,29:32)]
+```
+
+
+### Changing column name for merging and creating features for stroke location
+```{r}
+patChar=rename(patChar, pid= PID )
+patChar$RightH.Stroke= ifelse(patChar$CSstrkloc==1, 1, 0)
+patChar$LeftH.Stroke= ifelse(patChar$CSstrkloc==2, 1, 0)
+
+```
+
+
 
 
 Merge data
@@ -348,7 +353,7 @@ plot2<-ggplot(data12, aes(propensity.score)) +
 
 
 
-  grid.arrange(plot1, plot2, ncol=2)
+grid.arrange(plot1, plot2, ncol=2)
 
 ```
 
@@ -475,7 +480,7 @@ A vector indicating the observations which are in the treatment regime and those
 A matrix containing the variables we wish to match on. 
 #####This matrix may contain the actual observed covariates or the propensity score or a combination of both.
 
-- pop.size= 200
+- pop.size= 10000
 Population Size. This is the number of individuals genoud uses to solve the optimization problem. The theorems proving that genetic algorithms find good solutions are asymptotic in population size. Therefore, it is important that this value not be small. See genoud for more details.
 
 **GENoud**- GENetic Optimization Using Derivatives
