@@ -12,7 +12,6 @@ knitr::opts_chunk$set(root.dir = "C:/Users/nadir/Desktop/Matching/BKN 599 Advanc
 
 
 # Matching project for evaluating effects of treatment dosage
-
 clear workspace variables
 clear command window (same as ctrl+L. )
 close all plots
@@ -22,15 +21,15 @@ cat("\014")
 graphics.off() 
 ```
 
-
 ```{r}
 library(tidyverse)
 library(Matching)
 library(cobalt)
+library(onehot)
 library(pander)
 ```
 
-variables
+### Thresholds
 ```{r}
 Lthreshold= 15
 Hthreshold= 30
@@ -42,206 +41,187 @@ setwd("C:/Users/nadir/Desktop/Matching/BKN 599 Advanced Data Analysis")
 evalData=read.csv("00042_evalDataset_notext.csv")
 patChar= read.csv("PatientCharacteristics_withDose.csv")
 rawd= read.csv("Raw Data_Included Subjects Only_mod.csv", sep="\t") # neural values
-
 ```
 
-
-### Coding all -99 values as missing data
+### Coding all -megatove values as missing data
 ```{r}
 evalData[evalData == -99] <- NA;
 patChar[(patChar ==-99)|(patChar ==-7)|(patChar ==-8)|(patChar ==-9)] <- NA;
 rawd[rawd ==-1] <- NA;
 ```
 
+#### Setting key for merging datasets 
+```{r}
+patChar=rename(patChar, pid= PID )
+rawd=rename(rawd, pid= Study_id )
+```
 
-### Removing subsidiary/redundant evaldata features
 ### Examining Matchnig features from EvalData visit 1 scores
 ```{r}
-evalData.cnames= data.frame(colnames(evalData))
-pc.cnames= data.frame(colnames(patChar))
-
-# evalData1 = evalData[c(5,6,120,128,204,246,260,277,367,368,371,372,376)]
-# evalData1= evalData1[evalData1$visitnum==1,]
-# summary(evalData1)
+# evalData.cnames= data.frame(colnames(evalData))
+# pc.cnames= data.frame(colnames(patChar))
+# rawd.cnames= data.frame(colnames(rawd))
 # evalData1=evalData1[complete.cases(evalData1),]
 # evalD.correlations= data.frame(cor(evalData1[-c(1,2)]))
 ```
 
-## Dummy datasets-------------------------------------------------
+# Processing Raw/Neural Data set
 ```{r}
-evalData1= evalData[-c(1:4, 7:203, 205:245, 247:276, 278:366, 369:375)] 
-patChar1= patChar[c(3,6,8:10, 12:24,27:32)]
-extrafeat= dataMerged= merge(evalData1,patChar1)
+rawd$multlesions= as.integer(rawd$A2x!="\\N")
+rawd= rawd[c(1,13,32, 107, 130, 143)];
+rawd$old_stroke= as.integer(as.factor(rawd$old_stroke))-1
+rawd$leukoaraiosis= as.integer(as.factor(rawd$leukoaraiosis))-1
+rawd$A1EstVol= log2(rawd$A1EstVol+1)
+rawd=rename(rawd, log2.A1EstVol= A1EstVol ) #renaming column name
 ```
 
-
-Remove sparse features/features with no use
+# Remove sparse features/features with no use
 ```{r}
-evalData = evalData[c(5,6,120,128,204,246,260,277,367,368,371,372)]
-#### Note: Leaving out FAS scores because many (18) missed values for visit 1 stats
+# evalData = evalData[c(5,6,120,128,204,246,260,277,367,368,371,372)]
+evalData = evalData[c(5,6,107,120,128,204,246,260,277,367,368,371,372)]
+# Note: Leaving out FAS scores because many (18) missed values for visit 1 stats
 patChar= patChar[c(3,6,7,12,15:21,27,29:32)]
+
+#removing Treatment type
+patChar= patChar[-c(3)]
 ```
 
 
-### Changing column name for merging and creating features for stroke location
-```{r}
-patChar=rename(patChar, pid= PID )
-patChar$RightH.Stroke= ifelse(patChar$CSstrkloc==1, 1, 0)
-patChar$LeftH.Stroke= ifelse(patChar$CSstrkloc==2, 1, 0)
-
-```
-
-
-
-
-Merge data
+### Merge data
 ```{r}
 dataMerged= merge(evalData,patChar)
+dataMerged= merge(dataMerged, rawd)
 ```
-
-Feature manipulation
-```{r}
-dataMerged$severity= ifelse(dataMerged$severity=="H", 1, 0)
-dataMerged$finished_college=ifelse(dataMerged$DEMOedu>4,1,0)
-dataMerged$DEMOedu=NULL
-```
-
-
-
-Changing table to numeric
-```{r}
-for (i in 2:ncol(dataMerged)){
-  dataMerged[c(i)]= as.numeric(unlist(dataMerged[c(i)]))
-}
-```
-
-This line removes all subjects between 16-29 hours of dosage
-```{r}
-dataMerged=dataMerged[dataMerged$dose_hours>=Hthreshold | dataMerged$dose_hours<=Lthreshold,]
-```
-
 
 
 ### Extract visit datas
 ```{r}
 dataVisit1= subset(dataMerged, visitnum==1)                       
 dataVisit2= subset(dataMerged, visitnum==2)       
-dataVisit3 = subset(dataMerged, visitnum==3)
+rm(dataMerged)
 ```
+
 
 ### Removing subjects with missing values
 ```{r}
 dataVisit1= dataVisit1[complete.cases(dataVisit1),]
 dataVisit2= dataVisit2[complete.cases(dataVisit2),]
-dataVisit3= dataVisit3[complete.cases(dataVisit3),]
 ```
 
-### Removing visit1 data with no available visit 2 features
+
+### Removing subjects who don't attend visits 1 and 2
 ```{r}
 temp1= data.frame(dataVisit1$pid); 
-names(temp1)[1]<-paste("pid");   #renaming column name to "pid"
-
 temp2= data.frame(dataVisit2$pid); 
+
+names(temp1)[1]<-paste("pid");   #renaming column name to "pid"
 names(temp2)[1]<-paste("pid");   #renaming column name to "pid"
 
-temp3= data.frame(dataVisit3$pid); 
-names(temp3)[1]<-paste("pid");   #renaming column name to "pid"
-
 temp= merge(temp1,temp2)
-temp= merge(temp, temp3)
 
 dataVisit1= merge(temp,dataVisit1)
 dataVisit2= merge(temp,dataVisit2)
-dataVisit3= merge(temp,dataVisit3)
 
-rm(temp,temp1,temp2,temp3)
+rm(temp,temp1,temp2)
 ```
 
 
-
-### Check number of missing values
-```{r}
-sum(is.na(dataVisit1))
-sum(is.na(dataVisit2))
-sum(is.na(dataVisit3))
-```
-
-
-
-### Creating new dataset for future calculations
+### Creating dataset for matching
 ```{r}
 data12= dataVisit1
 ```
-#### Note: The Low Dose group is the treated group, and High Dose is the control group for matching
-creating binary variable indicating whether subject belongs in Low Dose or High Dose group  
+
+
+### One hot encoding
 ```{r}
-data12$treat=ifelse(dataVisit1$dose_hours<=27, 1, 0)
+# Site code
+sitecode=data.frame(as.factor(data12$siteCode)) 
+names(sitecode)[1]<-paste("Site.code")
+data12 = cbind(data12,data.frame(predict(onehot(sitecode),sitecode)))
+
+# Predominant
+predominant=data.frame(as.factor(data12$predominant)) 
+names(predominant)[1]<-paste("predominant")
+data12 = cbind(data12,data.frame(predict(onehot(predominant,  max_levels = 13),predominant)))
+
+# Ethnicity- lack of both indicates declined to report
+data12$hispanic.latino= ifelse(data12$DEMOEthnicity==1, 1, 0)
+data12$nonhispanic.latino= ifelse(data12$DEMOEthnicity==2, 1, 0)
+
+# Race
+data12$race.indeginous= ifelse(data12$DEMORace==1, 1, 0)
+data12$race.asian= ifelse(data12$DEMORace==2, 1, 0)
+data12$race.pacific= ifelse(data12$DEMORace==3, 1, 0)
+data12$race.africanam= ifelse(data12$DEMORace== 4, 1, 0)
+data12$race.caucasian= ifelse(data12$DEMORace== 5, 1, 0)
+data12$race.other= ifelse(data12$DEMORace== 6, 1, 0)
+
+# Education
+data12$edu.underHS= ifelse(data12$DEMOedu==1, 1, 0)
+data12$edu.someHS= ifelse(data12$DEMOedu==2, 1, 0)
+data12$edu.finishHS= ifelse(data12$DEMOedu==3, 1, 0)
+data12$edu.someCollege= ifelse(data12$DEMOedu== 4, 1, 0)
+data12$edu.finishCollege= ifelse(data12$DEMOedu== 5, 1, 0)
+data12$edu.finishMasters= ifelse(data12$DEMOedu== 6, 1, 0)
+data12$edu.finishPHD= ifelse(data12$DEMOedu== 7, 1, 0)
+
+# Stroke type
+data12$stroke.loc.RightH= ifelse(data12$CSstrkloc==1, 1, 0)
+data12$stroke.loc.LeftH= ifelse(data12$CSstrkloc==2, 1, 0)
+data12$stroke.loc.cerebellar= ifelse(data12$CSstrkloc==3, 1, 0)
+data12$stroke.loc.brainstem= ifelse(data12$CSstrkloc== 4, 1, 0)
+
+# Stroke location
+data12$stroke.loc.RightH= ifelse(data12$CSstrkloc==1, 1, 0)
+data12$stroke.loc.LeftH= ifelse(data12$CSstrkloc==2, 1, 0)
+data12$stroke.loc.cerebellar= ifelse(data12$CSstrkloc==3, 1, 0)
+data12$stroke.loc.brainstem= ifelse(data12$CSstrkloc== 4, 1, 0)
+
+#Remove extra columns and extra variables
+data12$DEMOedu=NULL
+data12$DEMOEthnicity=NULL
+data12$DEMORace=NULL
+data12$CSstrkloc=NULL
+data12$CSstrktype=NULL
+data12$predominant=NULL
+data12$siteCode=NULL
+data12$visitnum= NULL
+rm(sitecode,predominant)
 ```
 
 
-
-### Creating change parameters from differences in visit2 and vist 1
+### Changing table to numeric
 ```{r}
-data12$sishand_change= dataVisit2$SIS_hand-dataVisit1$SIS_hand
-data12$fugm_change= dataVisit2$ufugm-dataVisit1$ufugm
-data12$logwmftMA_change= dataVisit2$log_mean_time_MA_PA-dataVisit1$log_mean_time_MA_PA
-data12$logwmftLA_change= dataVisit2$log_mean_time_LA_PA-dataVisit1$log_mean_time_LA_PA
-```
-
-### Creating retention parameters from differences in visit2 and visit 3
-```{r}
-data12$sishand_retentionv23= dataVisit3$SIS_hand-dataVisit2$SIS_hand
-data12$fugm_retentionv23= dataVisit3$ufugm-dataVisit2$ufugm
-data12$logwmftMA_retentionv23= dataVisit3$log_mean_time_MA_PA-dataVisit2$log_mean_time_MA_PA
-data12$logwmftLA_retentionv23= dataVisit3$log_mean_time_LA_PA-dataVisit2$log_mean_time_LA_PA
-```
-
-# If we further include the datasets raw data and icareupdate
-
-#renaming column name
-```{r}
-rawd=rename(rawd, pid= Study_id ) 
-rawd$pid =toupper(rawd$pid)
-
-```
-
-#### EXTRA------------
-```{r}
-rawd2= rawd[c(1,4,7:14,27,31,32,79,133,134)]
-dataEXTRA= merge(rawd2,data12[,1:2], by = "pid")
-dataEXTRA=dataEXTRA[-c(17)]
-extraF= subset(extrafeat, visitnum<2) 
-dataEXTRA= merge(extraF, dataEXTRA, by = "pid")
-dataEXTRA=dataEXTRA[-c(2,13,14)]
-dataEXTRA$FCtotalOT=as.numeric(paste(dataEXTRA$FCtotalOT))
-dataEXTRA[dataEXTRA == -99] <- NA
-# Converting to factors
-
-fnames <- c(8:12,14:22,24,25,27,28,39)
-dataEXTRA[,fnames] <- lapply(dataEXTRA[,fnames] , factor)
-
-
-pander(summary(dataEXTRA))
+for (i in 2:ncol(data12)){
+  data12[c(i)]= as.numeric(unlist(data12[c(i)]))
+}
 ```
 
 
-
+### Creating visit2 values, and recovery parameters from differences in visit2 and vist 1
 ```{r}
-#Note that for the raw dataset, A1Diameter and A1x values are the exact same
-rawd$multlesions= as.integer(rawd$A2x!="\\N")
-rawd= rawd[c(1,7,13, 107, 143)];
-rawd$old_stroke= as.integer(rawd$old_stroke)-1
+data12$SIS_V2= dataVisit2$SIS_hand
+data12$fugm_V2= dataVisit2$ufugm
+data12$logwmftMA_V2= dataVisit2$log_mean_time_MA_PA
 
-
-rawd$stroketype= as.integer(rawd$stroketype)-1
-rawd=rename(rawd, Ischemic= stroketype ) #renaming column name
-
-rawd$A1EstVol= log2(rawd$A1EstVol+1)
-rawd=rename(rawd, log2.A1EstVol= A1EstVol ) #renaming column name
-
-data12= merge(rawd,data12, by = "pid")
-data12= data12[-c(6)] #Removing visitnumber column
+data12$sishand_recovery= dataVisit2$SIS_hand-dataVisit1$SIS_hand
+data12$fugm_recovery= dataVisit2$ufugm-dataVisit1$ufugm
+data12$logwmftMA_recovery= dataVisit2$log_mean_time_MA_PA-dataVisit1$log_mean_time_MA_PA
 ```
+
+
+# Note: Low Dose group is the treated group, and High Dose is the control group for matching
+### creating binary variable indicating whether subject belongs in Low Dose or High Dose group  
+```{r}
+data12$treat=ifelse(data12$dose_hours<=27, 1, 0)
+```
+
+
+### This line removes all subjects between 16-29 hours of dosage
+```{r}
+# data12=data12[data12$dose_hours>=Hthreshold | data12$dose_hours<=Lthreshold,]
+```
+
 
 
 ### Creating 2 dataframes separatomg low dose and high dose (not used)
@@ -251,20 +231,12 @@ lowdosegroup= subset(data12, treat==1)
 ```
 
 
-
-
 ### Propensity Score Matching code starts here
 
 creates a marrix from columns/features
 ```{r}
-X= cbind(data12$SIS_hand, data12$ufugm, data12$CSgender, data12$NIHtot, 
-         data12$log_mean_time_MA_PA, data12$log_mean_time_LA_PA,
-         data12$severity, data12$LeftH.Stroke, data12$RightH.Stroke,
-         data12$onset_to_rand, data12$age_at_rand,
-         data12$concordance, data12$finished_college, 
-         #New variables from neural data
-         data12$Ischemic, data12$log2.A1EstVol, data12$old_stroke, data12$multlesions)
-
+# X= data.matrix(data12[,c(2:11,13:62)])
+X= data.matrix(data12[,c(2:12,14:63)])
 ```
 
 
@@ -278,14 +250,6 @@ family= binomial() specifies that Logistic Regression is to be performed
 ```{r}
 model <- glm(treat ~ X,    family = binomial(), data = data12 )
 ```
-
-Subjects are more likely to be in treated (Low Dose) group if "Estimate" values are positive
-```{r}
-summary(model) 
-
-
-```
-
 
 
 ### Matching and estimating effects of causality using "Match" package
@@ -316,7 +280,6 @@ Matching with replacement
 ```{r}
 rr1 =Match(Tr= data12$treat, X= model$fitted.values, estimand = "ATT", 
            M=1, ties= FALSE, replace= TRUE)
-
 ```
 
 
@@ -338,8 +301,6 @@ plot1<-ggplot(data12, aes(propensity.score)) +
   ylim(c(0,23))+
   theme(plot.title = element_text(size = 10, face = "bold"))
 
-
-
 plot2<-ggplot(data12, aes(propensity.score)) +
   geom_histogram(data= data12[rr1$index.treated,],fill = "red", alpha = 0.2,binwidth=0.04)+
   geom_histogram(data= data12[rr1$index.control,],fill = "blue", alpha = 0.2,binwidth=0.04)+
@@ -350,8 +311,6 @@ plot2<-ggplot(data12, aes(propensity.score)) +
   xlim(c(0,1))+
   ylim(c(0,23))+
   theme(plot.title = element_text(size = 10, face = "bold"))
-
-
 
 grid.arrange(plot1, plot2, ncol=2)
 
@@ -367,7 +326,9 @@ length(unique(rr1$index.control))
 
 
 
-####Assessing balance
+
+
+### Assessing balance
 "MatchBalance" is used to determine if Match was successful in achieving balance on the observed covariates.
 
 -treat~SIS_hand+ ...
@@ -377,54 +338,56 @@ This formula does not estimate any model. The formula is simply an efficient way
 The number of bootstrap samples to be run. If zero, no bootstraps are done. Bootstrapping is highly recommended because the bootstrapped Kolmogorov-Smirnov test provides correct coverage even when the distributions being compared are not continuous. At least 500 nboots (preferably 1000) are recommended for publication quality p-values.
 
 ```{r}
-MatchBalance(treat~ SIS_hand + ufugm + NIHtot + log_mean_time_MA_PA +
-               log_mean_time_LA_PA +CSgender+ concordance + severity + 
-               onset_to_rand + finished_college + age_at_rand +
-               Ischemic + log2.A1EstVol+ old_stroke+ multlesions + 
-               LeftH.Stroke + RightH.Stroke + propensity.score,
-             match.out= rr1, nboots=100,data= data12)
+MatchBalance(treat~ ave_CAHM + CHAMchallenge + SIS_hand + ufugm + NIHtot + log_mean_time_MA_PA +
+               log_mean_time_LA_PA + EQ_index +grip_MA +grip_LA +RNLIadj+
+               
+               CSgender+ concordance +  onset_to_rand + CStpa + age_at_rand +  
+               FCtotalOT+ log2.A1EstVol+old_stroke +DEMOsmoke+ leukoaraiosis+ multlesions+ 
+               
+               Site.code.1+ Site.code.2+ Site.code.3+Site.code.4+  
+               Site.code.5+ Site.code.6+ Site.code.7+ predominant.AC1+ predominant.AC2 +
+               predominant.AC3+ predominant.ACH +predominant.basilar+ predominant.IB+ 
+               predominant.LS+ predominant.MC2+ predominant.MC3+ predominant.MC5+ predominant.PCA+
+               predominant.vertebral +predominant.THP+ hispanic.latino+nonhispanic.latino+ 
+               race.indeginous+ race.asian+ race.pacific+ race.africanam+ race.caucasian + 
+               race.other+ edu.underHS+ edu.someHS +edu.finishHS +edu.someCollege +
+               edu.finishCollege +edu.finishMasters +edu.finishPHD+stroke.loc.RightH+ 
+               stroke.loc.LeftH +stroke.loc.cerebellar +stroke.loc.brainstem,
+               
+             match.out= rr1, nboots=1000,data= data12)
 
-```
-
-
-
-####Further assessing balance- Plotting matched values for SIS Hand and Log mean time for WMFT
-```{r}
-qqplot(data12$SIS_hand[rr1$index.control],data12$SIS_hand[rr1$index.treated])
-abline(coef=c(0,1),col=2)
-
-qqplot(data12$log_mean_time_MA_PA[rr1$index.control],data12$log_mean_time_MA_PA[rr1$index.treated])
-abline(coef=c(0,1),col=2)
-
-```
-####Checking unique values of matched subjects
-```{r}
-length(unique(rr1$index.treated))
-length(unique(rr1$index.control))
 ```
 
 
 ## Cobalt package for assessing balance
 ```{r}
-
-
 set.cobalt.options(continuous= "std",binary= "std")
 
-(bal.tab(rr1, treat ~ SIS_hand + ufugm + NIHtot + log_mean_time_MA_PA +
-               log_mean_time_LA_PA +CSgender+ concordance + severity + 
-               onset_to_rand + finished_college + age_at_rand +
-               Ischemic + log2.A1EstVol+ old_stroke+ multlesions + 
-               LeftH.Stroke + RightH.Stroke,disp.v.ratio = TRUE, data = data12, 
-              abs= TRUE, m.threshold =0.1))
-
+(bal.tab(rr1, treat~ ave_CAHM + CHAMchallenge +  SIS_hand + ufugm + NIHtot + log_mean_time_MA_PA +
+               log_mean_time_LA_PA + EQ_index +grip_MA +grip_LA +RNLIadj+
+               
+               CSgender+ concordance +  onset_to_rand + CStpa + age_at_rand +  
+               FCtotalOT+ log2.A1EstVol+old_stroke +DEMOsmoke+ leukoaraiosis+ multlesions+ 
+               
+               Site.code.1+ Site.code.2+ Site.code.3+Site.code.4+  
+               Site.code.5+ Site.code.6+ Site.code.7+ predominant.AC1+ predominant.AC2 +
+               predominant.AC3+ predominant.ACH +predominant.basilar+ predominant.IB+ 
+               predominant.LS+ predominant.MC2+ predominant.MC3+ predominant.MC5+ predominant.PCA+
+               predominant.vertebral +predominant.THP+ hispanic.latino+nonhispanic.latino+ 
+               race.indeginous+ race.asian+ race.pacific+ race.africanam+ race.caucasian + 
+               race.other+ edu.underHS+ edu.someHS +edu.finishHS +edu.someCollege +
+               edu.finishCollege +edu.finishMasters +edu.finishPHD+stroke.loc.RightH+ 
+               stroke.loc.LeftH +stroke.loc.cerebellar +stroke.loc.brainstem+ propensity.score,
+         
+         disp.v.ratio = TRUE, data = data12,abs= TRUE, m.threshold =0.1))
 ```
 
 
-Visualizing Balance
-
+### Looking at distributions of all continuous variables
 ```{r}
 columns = colnames(data12)
-for (i in c(3,7:10,14,16,29)){
+# for (i in c(2:11,13,15,17,20)){
+for (i in c(2:12,14,16,18,21)){
   string= columns[i]
   
   b= max(data12[,i])/25
@@ -435,16 +398,16 @@ for (i in c(3,7:10,14,16,29)){
     ggtitle("Low Dose(Red) vs Unmatched High Dose(Blue)")+
     theme(plot.title = element_text(face="bold", size=10)) +
     xlab(paste(string, "histogram"))+
-    coord_cartesian(ylim=c(0,40))+
+    coord_cartesian(ylim=c(0,35))+
     xlim(min(data12[,i]),max(data12[,i]))
   
   plot2<- ggplot(data12, aes(eval(parse(text = string)))) +
     geom_histogram(data= data12[rr1$index.treated,],fill="red",alpha =0.2, binwidth=b)+
     geom_histogram(data= data12[rr1$index.control,],fill="blue",alpha =0.2, binwidth=b)+
-    ggtitle("Low Dose (Red) vs Matched High Dose(Blue)")+
+    ggtitle("Low Dose(Red) vs Matched High Dose(Blue)")+
     theme(plot.title = element_text( face="bold", size=10)) +
     xlab(paste(string, "histogram"))+
-    coord_cartesian(ylim=c(0,40))+
+    coord_cartesian(ylim=c(0,35))+
     xlim(min(data12[,i]),max(data12[,i]))
   
    plot3<-ggplot(data12, aes(eval(parse(text = string)))) +
@@ -458,12 +421,12 @@ for (i in c(3,7:10,14,16,29)){
    plot4<-ggplot(data12, aes(eval(parse(text = string)))) +
     geom_density(data = data12[rr1$index.treated,],fill = "red", alpha = 0.2)+
     geom_density(data = data12[rr1$index.control,],fill = "blue", alpha = 0.2)+
-    ggtitle("Low Dose(Red) vs Unmatched High Dose(Blue)")+
+    ggtitle("Low Dose(Red) vs Matched High Dose(Blue)")+
     theme(plot.title = element_text(face="bold", size=10)) +
     xlab(paste(string, "density"))+
     xlim(min(data12[,i]),max(data12[,i]))
   
-  grid.arrange(plot1, plot2, plot3,plot4, ncol=2, nrow=2)
+  grid.arrange(plot1, plot2, plot3, plot4, ncol=2, nrow=2)
 }
 
 ```
@@ -472,18 +435,14 @@ for (i in c(3,7:10,14,16,29)){
 
 ### Genetic matching 
 This function finds optimal balance using multivariate matching where a genetic search algorithm determines the weight each covariate is given. Balance is determined by examining cumulative probability distribution functions of a variety of standardized statistics. By default, these statistics include t-tests and Kolmogorov-Smirnov tests. A variety of descriptive statistics based on empirical-QQ (eQQ) plots can also be used or any user provided measure of balance. The statistics are not used to conduct formal hypothesis tests, because no measure of balance is a monotonic function of bias and because balance should be maximized without limit. The object returned by GenMatch can be supplied to the Match function (via the Weight.matrix option) to obtain causal estimates. GenMatch uses **GENoud** to perform the genetic search. 
-
 - Tr= data12$treat
 A vector indicating the observations which are in the treatment regime and those which are not. This can either be a logical vector or a real vector where 0 denotes control and 1 denotes treatment.
-
 - X=X
 A matrix containing the variables we wish to match on. 
 #####This matrix may contain the actual observed covariates or the propensity score or a combination of both.
-
 - pop.size= 10000
 Population Size. This is the number of individuals genoud uses to solve the optimization problem. The theorems proving that genetic algorithms find good solutions are asymptotic in population size. Therefore, it is important that this value not be small. See genoud for more details.
-
-**GENoud**- GENetic Optimization Using Derivatives
+-**GENoud**- GENetic Optimization Using Derivatives
 Genoud is a function that combines evolutionary search algorithms with derivative-based (Newton or quasi-Newton) methods to solve difficult optimization problems.
 
 ```{r}
@@ -496,8 +455,6 @@ mgen1=Match(Tr=data12$treat, X=X1, Weight.matrix = gen1);
 ```
 
 
-
-
 ####Summary of the model will tell us about Causal relationship
 ```{r}
 summary(mgen1)
@@ -506,25 +463,24 @@ summary(mgen1)
 
 #### Assessing balance
 ```{r}
-MatchBalance(treat~ SIS_hand + ufugm + NIHtot + log_mean_time_MA_PA +
-               log_mean_time_LA_PA +CSgender+ concordance + severity + 
-               onset_to_rand + finished_college + age_at_rand+
-               Ischemic + log2.A1EstVol+ LeftH.Stroke + RightH.Stroke +
-               old_stroke+ multlesions + propensity.score,
-               data= data12, match.out= mgen1, nboots=0)
+MatchBalance(treat~ ave_CAHM+ CHAMchallenge + SIS_hand + ufugm + NIHtot + log_mean_time_MA_PA +
+               log_mean_time_LA_PA + EQ_index +grip_MA +grip_LA +RNLIadj+
+               
+               CSgender+ concordance +  onset_to_rand + CStpa + age_at_rand +  
+               FCtotalOT+ log2.A1EstVol+old_stroke +DEMOsmoke+ leukoaraiosis+ multlesions+ 
+               
+               Site.code.1+ Site.code.2+ Site.code.3+Site.code.4+  
+               Site.code.5+ Site.code.6+ Site.code.7+ predominant.AC1+ predominant.AC2 +
+               predominant.AC3+ predominant.ACH +predominant.basilar+ predominant.IB+ 
+               predominant.LS+ predominant.MC2+ predominant.MC3+ predominant.MC5+ predominant.PCA+
+               predominant.vertebral +predominant.THP+ hispanic.latino+nonhispanic.latino+ 
+               race.indeginous+ race.asian+ race.pacific+ race.africanam+ race.caucasian + 
+               race.other+ edu.underHS+ edu.someHS +edu.finishHS +edu.someCollege +
+               edu.finishCollege +edu.finishMasters +edu.finishPHD+stroke.loc.RightH+ 
+               stroke.loc.LeftH +stroke.loc.cerebellar +stroke.loc.brainstem,
+             
+               data= data12, match.out= mgen1, nboots=100)
 
-
-```
-
-
-####Further assessing balance- Plotting matched values for SIS Hand and Log mean time for WMFT
-```{r}
-
-qqplot(data12$SIS_hand[mgen1$index.control],data12$SIS_hand[mgen1$index.treated])
-abline(coef=c(0,1),col=2)
-
-qqplot(data12$log_mean_time_MA_PA[mgen1$index.control],data12$log_mean_time_MA_PA[mgen1$index.treated])
-abline(coef=c(0,1),col=2)
 
 ```
 
@@ -536,18 +492,30 @@ length(unique(mgen1$index.control))
 ```
 
 ```{r}
-(bal.tab(mgen1, treat ~ SIS_hand + ufugm + NIHtot + log_mean_time_MA_PA +
-               log_mean_time_LA_PA +CSgender+ concordance + severity + 
-               onset_to_rand + finished_college + age_at_rand +
-               Ischemic + log2.A1EstVol+ old_stroke+ multlesions + 
-               LeftH.Stroke + RightH.Stroke + propensity.score,disp.v.ratio = TRUE, data = data12, 
-              abs= TRUE, m.threshold =0.1))
+(bal.tab(mgen1, treat~ ave_CAHM+ CHAMchallenge + SIS_hand + ufugm + NIHtot + log_mean_time_MA_PA +
+               log_mean_time_LA_PA + EQ_index +grip_MA +grip_LA +RNLIadj+
+               
+               CSgender+ concordance +  onset_to_rand + CStpa + age_at_rand +  
+               FCtotalOT+ log2.A1EstVol+old_stroke +DEMOsmoke+ leukoaraiosis+ multlesions+ 
+               
+               Site.code.1+ Site.code.2+ Site.code.3+Site.code.4+  
+               Site.code.5+ Site.code.6+ Site.code.7+ predominant.AC1+ predominant.AC2 +
+               predominant.AC3+ predominant.ACH +predominant.basilar+ predominant.IB+ 
+               predominant.LS+ predominant.MC2+ predominant.MC3+ predominant.MC5+ predominant.PCA+
+               predominant.vertebral +predominant.THP+ hispanic.latino+nonhispanic.latino+ 
+               race.indeginous+ race.asian+ race.pacific+ race.africanam+ race.caucasian + 
+               race.other+ edu.underHS+ edu.someHS +edu.finishHS +edu.someCollege +
+               edu.finishCollege +edu.finishMasters +edu.finishPHD+stroke.loc.RightH+ 
+               stroke.loc.LeftH +stroke.loc.cerebellar +stroke.loc.brainstem+ propensity.score,
+         
+         disp.v.ratio = TRUE, data = data12,abs= TRUE, m.threshold =0.1))
 ```
 
 
 ```{r}
 columns = colnames(data12)
-for (i in c(3,7:10,14,16,29)){
+# for (i in c(2:11,13,15,17,20)){
+for (i in c(2:12,14,16,18,21)){
   string= columns[i]
   
   b= max(data12[,i])/25
@@ -593,7 +561,8 @@ for (i in c(3,7:10,14,16,29)){
 
 
 ```{r}
-for (i in c(2,4,5,13,15,17,18,19)){
+# for (i in c(14,16,18,19,21:62)){
+for (i in c(15,17,19,20,22:63)){
   string= columns[i]
   
   plot1<-ggplot(data12, aes(eval(parse(text = string)))) +
@@ -616,15 +585,6 @@ for (i in c(2,4,5,13,15,17,18,19)){
 }
 ```
 
-####Further assessing balance- Plotting matched values for SIS Hand and Log mean time for WMFT
-```{r}
-qqplot(data12$SIS_hand[mgen1$index.control],data12$SIS_hand[mgen1$index.treated])
-abline(coef=c(0,1),col=2)
-
-qqplot(data12$log_mean_time_MA_PA[mgen1$index.control],data12$log_mean_time_MA_PA[mgen1$index.treated])
-abline(coef=c(0,1),col=2)
-
-```
 
 #### Checking the correlation
 ```{r}
@@ -634,11 +594,21 @@ R2_with_replace
 ```
 
 ```{r}
- MatchBalance(treat~ SIS_hand + ufugm + NIHtot + log_mean_time_MA_PA +
-               log_mean_time_LA_PA +CSgender+ concordance + severity + 
-               onset_to_rand + finished_college + age_at_rand+
-               Ischemic + log2.A1EstVol+ LeftH.Stroke + RightH.Stroke +
-               old_stroke+ multlesions + propensity.score,
+ MatchBalance( treat~ ave_CAHM + CHAMChallenge + SIS_hand + ufugm + NIHtot + log_mean_time_MA_PA +
+               log_mean_time_LA_PA + EQ_index +grip_MA +grip_LA +RNLIadj+
+               
+               CSgender+ concordance +  onset_to_rand + CStpa + age_at_rand +  
+               FCtotalOT+ log2.A1EstVol+old_stroke +DEMOsmoke+ leukoaraiosis+ multlesions+ 
+               
+               Site.code.1+ Site.code.2+ Site.code.3+Site.code.4+  
+               Site.code.5+ Site.code.6+ Site.code.7+ predominant.AC1+ predominant.AC2 +
+               predominant.AC3+ predominant.ACH +predominant.basilar+ predominant.IB+ 
+               predominant.LS+ predominant.MC2+ predominant.MC3+ predominant.MC5+ predominant.PCA+
+               predominant.vertebral +predominant.THP+ hispanic.latino+nonhispanic.latino+ 
+               race.indeginous+ race.asian+ race.pacific+ race.africanam+ race.caucasian + 
+               race.other+ edu.underHS+ edu.someHS +edu.finishHS +edu.someCollege +
+               edu.finishCollege +edu.finishMasters +edu.finishPHD+stroke.loc.RightH+ 
+               stroke.loc.LeftH +stroke.loc.cerebellar +stroke.loc.brainstem+ propensity.score,
                data= data12, match.out= mgen1, nboots=0)
 
 
@@ -648,21 +618,16 @@ R2_with_replace
 
 ## Checking normality
 ```{r}
-
 library("ggpubr")
 #not normal if p is <0.05
+shapiro.test(data12$logwmftMA_recovery[mgen1$index.treated])
+shapiro.test(data12$logwmftMA_recovery[mgen1$index.control])
 
-shapiro.test(data12$logwmftMA_change[mgen1$index.treated])
-shapiro.test(data12$logwmftMA_change[mgen1$index.control])
+shapiro.test(data12$sishand_recovery[mgen1$index.treated])
+shapiro.test(data12$sishand_recovery[mgen1$index.control])
 
-shapiro.test(data12$logwmftMA_retentionv23[mgen1$index.treated])
-shapiro.test(data12$logwmftMA_retentionv23[mgen1$index.control])
-
-shapiro.test(data12$sishand_change[mgen1$index.treated])
-shapiro.test(data12$sishand_change[mgen1$index.control])
-
-shapiro.test(data12$sishand_retentionv23[mgen1$index.treated])
-shapiro.test(data12$sishand_retentionv23[mgen1$index.control])
+shapiro.test(data12$fugm_recovery[mgen1$index.treated])
+shapiro.test(data12$fugm_recovery[mgen1$index.control])
 
 
 # cor(as.matrix(data12[,2:28]))
@@ -671,13 +636,48 @@ shapiro.test(data12$sishand_retentionv23[mgen1$index.control])
 ## Ttests
 ```{r}
 
-t.test(data12$sishand_change[mgen1$index.treated],data12$sishand_change[mgen1$index.control])
+t.test(data12$sishand_recovery[mgen1$index.treated],data12$sishand_recovery[mgen1$index.control],paired = TRUE)
 
-wilcox.test(data12$sishand_retentionv23[mgen1$index.treated],data12$sishand_retentionv23[mgen1$index.control])
+wilcox.test(data12$logwmftMA_recovery[mgen1$index.treated],data12$logwmftMA_recovery[mgen1$index.control],paired = TRUE)
 
-wilcox.test(data12$logwmftMA_change[mgen1$index.treated],data12$logwmftMA_change[mgen1$index.control])
-
-wilcox.test(data12$logwmftMA_retentionv23[mgen1$index.treated],data12$logwmftMA_retentionv23[mgen1$index.control])
-
+wilcox.test(data12$fugm_recovery[mgen1$index.treated],data12$fugm_recovery[mgen1$index.control],paired = TRUE)
 
 ```
+
+```{r}
+ dose_hours= c(data12$dose_hours[mgen1$index.treated],data12$dose_hours[mgen1$index.control])
+ treat= c(data12$treat[mgen1$index.treated],data12$treat[mgen1$index.control])
+ SIS_Hand.recovery= c(data12$sishand_recovery[mgen1$index.treated],data12$sishand_recovery[mgen1$index.control])
+ WMFT.recovery= c(data12$logwmftMA_recovery[mgen1$index.treated],data12$logwmftMA_recovery[mgen1$index.control])
+
+datap= data.frame(dose_hours, treat, SIS_Hand.recovery,WMFT.recovery)
+
+ggplot(datap,aes(x=dose_hours,y=SIS_Hand.recovery))+
+  geom_jitter(alpha=0.7)+
+  geom_smooth(method='lm')+
+  xlab("Dose hours")+
+  ylab("SIS Hand score change: Visit 2- Visit1")
+  theme(axis.text=element_text(size=12),
+        axis.title=element_text(size=14,face="bold"))
+  
+ggplot(datap,aes(x=treat,y=SIS_Hand.recovery))+
+  geom_point(alpha=0.3)+
+  geom_smooth(method='lm')+
+  xlab("Low Dose (1) vs High Dose (0)")+
+  ylab("SIS Hand score change: Visit 2- Visit1")
+  theme(axis.text=element_text(size=12),
+        axis.title=element_text(size=14,face="bold"))
+  
+ggplot(datap,aes(x=dose_hours,y=WMFT.recovery))+
+  geom_point(alpha=0.7)+
+  geom_smooth(method='lm')+
+  xlab("Dose hours")+
+  ylab("log(WMFT) change: Visit 2- Visit1")
+  theme(axis.text=element_text(size=12),
+        axis.title=element_text(size=14,face="bold"))
+  
+#Regression analysis on SIS_Hand score
+linearm=  lm(datap$SIS_Hand.recovery~ datap$treat)
+pander(summary(linearm))
+```
+
