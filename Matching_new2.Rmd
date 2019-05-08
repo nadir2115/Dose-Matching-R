@@ -41,6 +41,12 @@ setwd("C:/Users/nadir/Desktop/Matching/BKN 599 Advanced Data Analysis")
 evalData=read.csv("00042_evalDataset_notext.csv")
 patChar= read.csv("PatientCharacteristics_withDose.csv")
 rawd= read.csv("Raw Data_Included Subjects Only_mod.csv", sep="\t") # neural values
+genweight= (load("C:/Users/nadir/Documents/genweight.Rda"))
+
+weightmatrix= data.matrix(A)
+rm(A)
+weights= diag(weightmatrix)
+
 ```
 
 ### Coding all -megatove values as missing data
@@ -139,31 +145,34 @@ sitecode=data.frame(as.factor(data12$siteCode))
 names(sitecode)[1]<-paste("Site.code")
 data12 = cbind(data12,data.frame(predict(onehot(sitecode),sitecode)))
 
-# Predominant
+# Predominant areas affected
 predominant=data.frame(as.factor(data12$predominant)) 
 names(predominant)[1]<-paste("predominant")
 data12 = cbind(data12,data.frame(predict(onehot(predominant,  max_levels = 13),predominant)))
+# combing ACs and MCs into same categories
+
+data12$predominant.AC= ifelse((data12$predominant.AC1==1)|(data12$predominant.AC2==1)|(data12$predominant.AC3==1),1,0)
+data12$predominant.MC=ifelse((data12$predominant.MC2==1)|(data12$predominant.MC3==1)|(data12$predominant.MC5==1),1,0)
 
 # Ethnicity- lack of both indicates declined to report
 data12$hispanic.latino= ifelse(data12$DEMOEthnicity==1, 1, 0)
 data12$nonhispanic.latino= ifelse(data12$DEMOEthnicity==2, 1, 0)
 
 # Race
-data12$race.indeginous= ifelse(data12$DEMORace==1, 1, 0)
+# Few subjects are indegenous/pacufic islanders
+data12$race.other= ifelse((data12$DEMORace==1)|(data12$DEMORace==3)|(data12$DEMORace==6), 1, 0) 
 data12$race.asian= ifelse(data12$DEMORace==2, 1, 0)
-data12$race.pacific= ifelse(data12$DEMORace==3, 1, 0)
 data12$race.africanam= ifelse(data12$DEMORace== 4, 1, 0)
 data12$race.caucasian= ifelse(data12$DEMORace== 5, 1, 0)
-data12$race.other= ifelse(data12$DEMORace== 6, 1, 0)
+
 
 # Education
-data12$edu.underHS= ifelse(data12$DEMOedu==1, 1, 0)
-data12$edu.someHS= ifelse(data12$DEMOedu==2, 1, 0)
+# under/some high school 
+data12$edu.noHSdegree= ifelse((data12$DEMOedu==1)|(data12$DEMOedu==2), 1, 0) 
 data12$edu.finishHS= ifelse(data12$DEMOedu==3, 1, 0)
 data12$edu.someCollege= ifelse(data12$DEMOedu== 4, 1, 0)
-data12$edu.finishCollege= ifelse(data12$DEMOedu== 5, 1, 0)
-data12$edu.finishMasters= ifelse(data12$DEMOedu== 6, 1, 0)
-data12$edu.finishPHD= ifelse(data12$DEMOedu== 7, 1, 0)
+# Bachelors, Masters and PhD grads piled into 1 category
+data12$edu.finishCollege= ifelse((data12$DEMOedu== 5)|(data12$DEMOedu== 6)|(data12$DEMOedu== 7), 1, 0)
 
 # Stroke type
 data12$stroke.loc.RightH= ifelse(data12$CSstrkloc==1, 1, 0)
@@ -186,6 +195,12 @@ data12$CSstrktype=NULL
 data12$predominant=NULL
 data12$siteCode=NULL
 data12$visitnum= NULL
+data12$predominant.AC1=NULL
+data12$predominant.AC2=NULL
+data12$predominant.AC3=NULL
+data12$predominant.MC2=NULL
+data12$predominant.MC3=NULL
+data12$predominant.MC5=NULL
 rm(sitecode,predominant)
 ```
 
@@ -235,8 +250,8 @@ lowdosegroup= subset(data12, treat==1)
 
 creates a marrix from columns/features
 ```{r}
-# X= data.matrix(data12[,c(2:11,13:62)])
-X= data.matrix(data12[,c(2:12,14:63)])
+# X= data.matrix(data12[,c(2:11,13:53)])
+X= data.matrix(data12[,c(2:12,14:54)])
 ```
 
 
@@ -255,23 +270,16 @@ model <- glm(treat ~ X,    family = binomial(), data = data12 )
 ### Matching and estimating effects of causality using "Match" package
 
 "Match" implements a variety of algorithms for multivariate matching including propensity score, Mahalanobis and inverse variance matching. The function is intended to be used in conjunction with the MatchBalance function which determines the extent to which Match has been able to achieve covariate balance
-
 - Y=y
 A vector containing the outcome of interest. Missing values are not allowed. An outcome vector is not required because the matches generated will be the same regardless of the outcomes. Of course, without any outcomes no causal effect estimates will be produced, only a matched dataset.
-
 - X= model$fitted.values
 A matrix containing the variables we wish to match on. This matrix may contain the actual observed covariates or the propensity score or a combination of both. All columns of this matrix must have positive variance or Match will return an error
 Note: In our case it is the propensity score (fitted.values are predicted values for log regr.)
-
 - estimand = "ATT"
 A character string for the estimand. The default estimand is "ATT", the sample average treatment effect for the treated. "ATE" is the sample average treatment effect, and "ATC" is the sample average treatment effect for the controls.
-
 - M = 1
 A scalar for the number of matches which should be found. The default is one-to-one matching. Also see the ties option
 
-- ties = FALSE
-A logical flag for whether ties should be handled deterministically. By default ties==TRUE. If, for example, one treated observation matches more than one control observation, the matched dataset will include the multiple matched control observations and the matched data will be weighted to reflect the multiple matches
-If ties==FALSE, ties will be randomly broken. If the dataset is large and there are many ties, setting ties=FALSE often results in a large speedup. Whether two potential matches are close enough to be considered tied
 
 -replace = TRUE
 Matching with replacement
@@ -334,26 +342,26 @@ length(unique(rr1$index.control))
 -treat~SIS_hand+ ...
 This formula does not estimate any model. The formula is simply an efficient way to use the R modeling language to list the variables we wish to obtain univariate balance statistics for. The dependent variable in the formula is usually the treatment indicator
 
--nboots= 0
+-nboots= 1000
 The number of bootstrap samples to be run. If zero, no bootstraps are done. Bootstrapping is highly recommended because the bootstrapped Kolmogorov-Smirnov test provides correct coverage even when the distributions being compared are not continuous. At least 500 nboots (preferably 1000) are recommended for publication quality p-values.
 
 ```{r}
 MatchBalance(treat~ ave_CAHM + CHAMchallenge + SIS_hand + ufugm + NIHtot + log_mean_time_MA_PA +
                log_mean_time_LA_PA + EQ_index +grip_MA +grip_LA +RNLIadj+
-               
-               CSgender+ concordance +  onset_to_rand + CStpa + age_at_rand +  
-               FCtotalOT+ log2.A1EstVol+old_stroke +DEMOsmoke+ leukoaraiosis+ multlesions+ 
-               
-               Site.code.1+ Site.code.2+ Site.code.3+Site.code.4+  
-               Site.code.5+ Site.code.6+ Site.code.7+ predominant.AC1+ predominant.AC2 +
-               predominant.AC3+ predominant.ACH +predominant.basilar+ predominant.IB+ 
-               predominant.LS+ predominant.MC2+ predominant.MC3+ predominant.MC5+ predominant.PCA+
-               predominant.vertebral +predominant.THP+ hispanic.latino+nonhispanic.latino+ 
-               race.indeginous+ race.asian+ race.pacific+ race.africanam+ race.caucasian + 
-               race.other+ edu.underHS+ edu.someHS +edu.finishHS +edu.someCollege +
-               edu.finishCollege +edu.finishMasters +edu.finishPHD+stroke.loc.RightH+ 
+
+               CSgender+ concordance +  onset_to_rand + CStpa + age_at_rand +
+               FCtotalOT+ log2.A1EstVol+old_stroke +DEMOsmoke+ leukoaraiosis+ multlesions+
+
+               Site.code.1+ Site.code.2+ Site.code.3+Site.code.4+
+               Site.code.5+ Site.code.6+ Site.code.7+ predominant.AC+
+               predominant.ACH +predominant.basilar+ predominant.IB+
+               predominant.LS+ predominant.MC+ predominant.PCA+
+               predominant.vertebral +predominant.THP+ hispanic.latino+nonhispanic.latino+
+               race.asian+  race.africanam+ race.caucasian +
+               race.other+ edu.noHSdegree +edu.finishHS +edu.someCollege +
+               edu.finishCollege+ stroke.loc.RightH+
                stroke.loc.LeftH +stroke.loc.cerebellar +stroke.loc.brainstem,
-               
+
              match.out= rr1, nboots=1000,data= data12)
 
 ```
@@ -363,22 +371,22 @@ MatchBalance(treat~ ave_CAHM + CHAMchallenge + SIS_hand + ufugm + NIHtot + log_m
 ```{r}
 set.cobalt.options(continuous= "std",binary= "std")
 
-(bal.tab(rr1, treat~ ave_CAHM + CHAMchallenge +  SIS_hand + ufugm + NIHtot + log_mean_time_MA_PA +
+(bal.tab(rr1, treat~ ave_CAHM + CHAMchallenge + SIS_hand + ufugm + NIHtot + log_mean_time_MA_PA +
                log_mean_time_LA_PA + EQ_index +grip_MA +grip_LA +RNLIadj+
-               
-               CSgender+ concordance +  onset_to_rand + CStpa + age_at_rand +  
-               FCtotalOT+ log2.A1EstVol+old_stroke +DEMOsmoke+ leukoaraiosis+ multlesions+ 
-               
-               Site.code.1+ Site.code.2+ Site.code.3+Site.code.4+  
-               Site.code.5+ Site.code.6+ Site.code.7+ predominant.AC1+ predominant.AC2 +
-               predominant.AC3+ predominant.ACH +predominant.basilar+ predominant.IB+ 
-               predominant.LS+ predominant.MC2+ predominant.MC3+ predominant.MC5+ predominant.PCA+
-               predominant.vertebral +predominant.THP+ hispanic.latino+nonhispanic.latino+ 
-               race.indeginous+ race.asian+ race.pacific+ race.africanam+ race.caucasian + 
-               race.other+ edu.underHS+ edu.someHS +edu.finishHS +edu.someCollege +
-               edu.finishCollege +edu.finishMasters +edu.finishPHD+stroke.loc.RightH+ 
-               stroke.loc.LeftH +stroke.loc.cerebellar +stroke.loc.brainstem+ propensity.score,
-         
+
+               CSgender+ concordance +  onset_to_rand + CStpa + age_at_rand +
+               FCtotalOT+ log2.A1EstVol+old_stroke +DEMOsmoke+ leukoaraiosis+ multlesions+
+
+               Site.code.1+ Site.code.2+ Site.code.3+Site.code.4+
+               Site.code.5+ Site.code.6+ Site.code.7+ predominant.AC+
+               predominant.ACH +predominant.basilar+ predominant.IB+
+               predominant.LS+ predominant.MC+ predominant.PCA+
+               predominant.vertebral +predominant.THP+ hispanic.latino+nonhispanic.latino+
+               race.asian+ race.pacific+ race.africanam+ race.caucasian +
+               race.other+ edu.noHSdegree +edu.finishHS +edu.someCollege +
+               edu.finishCollege+ stroke.loc.RightH+
+               stroke.loc.LeftH +stroke.loc.cerebellar +stroke.loc.brainstem,
+
          disp.v.ratio = TRUE, data = data12,abs= TRUE, m.threshold =0.1))
 ```
 
@@ -445,15 +453,48 @@ Population Size. This is the number of individuals genoud uses to solve the opti
 -**GENoud**- GENetic Optimization Using Derivatives
 Genoud is a function that combines evolutionary search algorithms with derivative-based (Newton or quasi-Newton) methods to solve difficult optimization problems.
 
+
 ```{r}
+
 # Adding propensity score to estimation
 X1 = cbind(X,data12$propensity.score)
 
-gen1 = GenMatch(Tr= data12$treat, X=X1, pop.size=10000, replace=TRUE, max.weight=1);
-mgen1=Match(Tr=data12$treat, X=X1, Weight.matrix = gen1);
-
 ```
 
+```{r}
+minimump= c()
+
+
+set.seed(1)
+
+
+gen1 = GenMatch(Tr= data12$treat, starting.values = weights, X=X1, pop.size=1000, replace=TRUE, max.weight=1)
+
+mgen1=Match(Y= data12$sishand_recovery, estimand= "ATT", Tr=data12$treat, X=X1, Weight.matrix = gen1)
+balanceA = MatchBalance(treat~ ave_CAHM + CHAMchallenge + SIS_hand + ufugm + NIHtot + log_mean_time_MA_PA +
+               log_mean_time_LA_PA + EQ_index +grip_MA +grip_LA +RNLIadj+
+
+               CSgender+ concordance +  onset_to_rand + CStpa + age_at_rand +
+               FCtotalOT+ log2.A1EstVol+old_stroke +DEMOsmoke+ leukoaraiosis+ multlesions+
+
+               Site.code.1+ Site.code.2+ Site.code.3+Site.code.4+
+               Site.code.5+ Site.code.6+ Site.code.7+ predominant.AC+
+               predominant.ACH +predominant.basilar+ predominant.IB+
+               predominant.LS+ predominant.MC+ predominant.PCA+
+               predominant.vertebral +predominant.THP+ hispanic.latino+nonhispanic.latino+
+               race.asia+ race.africanam+ race.caucasian +
+               race.other+ edu.noHSdegree +edu.finishHS +edu.someCollege +
+               edu.finishCollege+ stroke.loc.RightH+
+               stroke.loc.LeftH +stroke.loc.cerebellar +stroke.loc.brainstem,
+             
+               data= data12, match.out= mgen1, nboots=1000)
+
+minimump=c(minimump, balanceA$AMsmallest.p.value) 
+
+print(balanceA$AMsmallest.p.value)
+
+
+```
 
 ####Summary of the model will tell us about Causal relationship
 ```{r}
@@ -463,26 +504,27 @@ summary(mgen1)
 
 #### Assessing balance
 ```{r}
-MatchBalance(treat~ ave_CAHM+ CHAMchallenge + SIS_hand + ufugm + NIHtot + log_mean_time_MA_PA +
+MatchBalance(treat~ ave_CAHM + CHAMchallenge + SIS_hand + ufugm + NIHtot + log_mean_time_MA_PA +
                log_mean_time_LA_PA + EQ_index +grip_MA +grip_LA +RNLIadj+
-               
-               CSgender+ concordance +  onset_to_rand + CStpa + age_at_rand +  
-               FCtotalOT+ log2.A1EstVol+old_stroke +DEMOsmoke+ leukoaraiosis+ multlesions+ 
-               
-               Site.code.1+ Site.code.2+ Site.code.3+Site.code.4+  
-               Site.code.5+ Site.code.6+ Site.code.7+ predominant.AC1+ predominant.AC2 +
-               predominant.AC3+ predominant.ACH +predominant.basilar+ predominant.IB+ 
-               predominant.LS+ predominant.MC2+ predominant.MC3+ predominant.MC5+ predominant.PCA+
-               predominant.vertebral +predominant.THP+ hispanic.latino+nonhispanic.latino+ 
-               race.indeginous+ race.asian+ race.pacific+ race.africanam+ race.caucasian + 
-               race.other+ edu.underHS+ edu.someHS +edu.finishHS +edu.someCollege +
-               edu.finishCollege +edu.finishMasters +edu.finishPHD+stroke.loc.RightH+ 
+
+               CSgender+ concordance +  onset_to_rand + CStpa + age_at_rand +
+               FCtotalOT+ log2.A1EstVol+old_stroke +DEMOsmoke+ leukoaraiosis+ multlesions+
+
+               Site.code.1+ Site.code.2+ Site.code.3+Site.code.4+
+               Site.code.5+ Site.code.6+ Site.code.7+ predominant.AC+
+               predominant.ACH +predominant.basilar+ predominant.IB+
+               predominant.LS+ predominant.MC+ predominant.PCA+
+               predominant.vertebral +predominant.THP+ hispanic.latino+nonhispanic.latino+
+               race.asian++ race.africanam+ race.caucasian +
+               race.other+ edu.noHSdegree +edu.finishHS +edu.someCollege +
+               edu.finishCollege+ stroke.loc.RightH+
                stroke.loc.LeftH +stroke.loc.cerebellar +stroke.loc.brainstem,
              
-               data= data12, match.out= mgen1, nboots=100)
+               data= data12, match.out= mgen1, nboots=1000)
 
 
 ```
+
 
 
 ### Checking number of unique subjects after genetic matching
@@ -492,20 +534,20 @@ length(unique(mgen1$index.control))
 ```
 
 ```{r}
-(bal.tab(mgen1, treat~ ave_CAHM+ CHAMchallenge + SIS_hand + ufugm + NIHtot + log_mean_time_MA_PA +
+(bal.tab(mgen1, treat~ ave_CAHM + CHAMchallenge + SIS_hand + ufugm + NIHtot + log_mean_time_MA_PA +
                log_mean_time_LA_PA + EQ_index +grip_MA +grip_LA +RNLIadj+
-               
-               CSgender+ concordance +  onset_to_rand + CStpa + age_at_rand +  
-               FCtotalOT+ log2.A1EstVol+old_stroke +DEMOsmoke+ leukoaraiosis+ multlesions+ 
-               
-               Site.code.1+ Site.code.2+ Site.code.3+Site.code.4+  
-               Site.code.5+ Site.code.6+ Site.code.7+ predominant.AC1+ predominant.AC2 +
-               predominant.AC3+ predominant.ACH +predominant.basilar+ predominant.IB+ 
-               predominant.LS+ predominant.MC2+ predominant.MC3+ predominant.MC5+ predominant.PCA+
-               predominant.vertebral +predominant.THP+ hispanic.latino+nonhispanic.latino+ 
-               race.indeginous+ race.asian+ race.pacific+ race.africanam+ race.caucasian + 
-               race.other+ edu.underHS+ edu.someHS +edu.finishHS +edu.someCollege +
-               edu.finishCollege +edu.finishMasters +edu.finishPHD+stroke.loc.RightH+ 
+
+               CSgender+ concordance +  onset_to_rand + CStpa + age_at_rand +
+               FCtotalOT+ log2.A1EstVol+old_stroke +DEMOsmoke+ leukoaraiosis+ multlesions+
+
+               Site.code.1+ Site.code.2+ Site.code.3+Site.code.4+
+               Site.code.5+ Site.code.6+ Site.code.7+ predominant.AC+
+               predominant.ACH +predominant.basilar+ predominant.IB+
+               predominant.LS+ predominant.MC+ predominant.PCA+
+               predominant.vertebral +predominant.THP+ hispanic.latino+nonhispanic.latino+
+               race.asian+ race.pacific+ race.africanam+ race.caucasian +
+               race.other+ edu.noHSdegree +edu.finishHS +edu.someCollege +
+               edu.finishCollege+ stroke.loc.RightH+
                stroke.loc.LeftH +stroke.loc.cerebellar +stroke.loc.brainstem+ propensity.score,
          
          disp.v.ratio = TRUE, data = data12,abs= TRUE, m.threshold =0.1))
@@ -561,8 +603,8 @@ for (i in c(2:12,14,16,18,21)){
 
 
 ```{r}
-# for (i in c(14,16,18,19,21:62)){
-for (i in c(15,17,19,20,22:63)){
+# for (i in c(14,16,18,19,21:53)){
+for (i in c(15,17,19,20,22:54)){
   string= columns[i]
   
   plot1<-ggplot(data12, aes(eval(parse(text = string)))) +
@@ -586,36 +628,6 @@ for (i in c(15,17,19,20,22:63)){
 ```
 
 
-#### Checking the correlation
-```{r}
-R2_with_replace= cor(data12$log_mean_time_MA_PA[mgen1$index.control],data12$log_mean_time_MA_PA[mgen1$index.treated])^2
-R2_with_replace
-
-```
-
-```{r}
- MatchBalance( treat~ ave_CAHM + CHAMChallenge + SIS_hand + ufugm + NIHtot + log_mean_time_MA_PA +
-               log_mean_time_LA_PA + EQ_index +grip_MA +grip_LA +RNLIadj+
-               
-               CSgender+ concordance +  onset_to_rand + CStpa + age_at_rand +  
-               FCtotalOT+ log2.A1EstVol+old_stroke +DEMOsmoke+ leukoaraiosis+ multlesions+ 
-               
-               Site.code.1+ Site.code.2+ Site.code.3+Site.code.4+  
-               Site.code.5+ Site.code.6+ Site.code.7+ predominant.AC1+ predominant.AC2 +
-               predominant.AC3+ predominant.ACH +predominant.basilar+ predominant.IB+ 
-               predominant.LS+ predominant.MC2+ predominant.MC3+ predominant.MC5+ predominant.PCA+
-               predominant.vertebral +predominant.THP+ hispanic.latino+nonhispanic.latino+ 
-               race.indeginous+ race.asian+ race.pacific+ race.africanam+ race.caucasian + 
-               race.other+ edu.underHS+ edu.someHS +edu.finishHS +edu.someCollege +
-               edu.finishCollege +edu.finishMasters +edu.finishPHD+stroke.loc.RightH+ 
-               stroke.loc.LeftH +stroke.loc.cerebellar +stroke.loc.brainstem+ propensity.score,
-               data= data12, match.out= mgen1, nboots=0)
-
-
-```
-
-
-
 ## Checking normality
 ```{r}
 library("ggpubr")
@@ -637,6 +649,13 @@ shapiro.test(data12$fugm_recovery[mgen1$index.control])
 ```{r}
 
 t.test(data12$sishand_recovery[mgen1$index.treated],data12$sishand_recovery[mgen1$index.control],paired = TRUE)
+
+# Experimenting with outcomes from linear regression
+# datar= rbind(data12[mgen1$index.treated,],data12[mgen1$index.control,])
+# datar= datar[,c(2:12,14:63,67,70)]
+# summary(lm(sishand_recovery~treat,datar))
+# summary(lm(sishand_recovery~.,datar))
+
 
 wilcox.test(data12$logwmftMA_recovery[mgen1$index.treated],data12$logwmftMA_recovery[mgen1$index.control],paired = TRUE)
 
