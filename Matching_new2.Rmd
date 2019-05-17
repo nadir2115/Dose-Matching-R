@@ -41,11 +41,9 @@ setwd("C:/Users/nadir/Desktop/Matching/BKN 599 Advanced Data Analysis")
 evalData=read.csv("00042_evalDataset_notext.csv")
 patChar= read.csv("PatientCharacteristics_withDose.csv")
 rawd= read.csv("Raw Data_Included Subjects Only_mod.csv", sep="\t") # neural values
-genweight= (load("C:/Users/nadir/Documents/genweight.Rda"))
-
-weightmatrix= data.matrix(A)
-rm(A)
-weights= diag(weightmatrix)
+library(readr)
+# load("C:/Users/nadir/Desktop/Matching/BKN 599 Advanced Data Analysis/w16dataframe.Rda") #Genetic weights
+genweight = c(0.95728518, 0.75157699, 0.19836472, 0.32882063, 0.37447772, 0.18280747, 0.03318380, 0.24723912, 0.97105001, 0.89760586, 0.52468406, 0.60335013, 0.51471519, 0.61077832, 0.17156698, 0.13696445, 0.27018174, 0.12317546, 0.46834129, 0.01464439, 0.79873410,  0.24452164, 0.73816523, 0.13206673, 0.17273388, 0.47748087, 0.01187614, 0.12391834,  0.18432683, 0.70090786, 0.71827487, 0.22531714, 0.28043835, 0.47606459, 0.08193887, 0.13251869, 0.22342897, 0.04373737, 0.65149348, 0.74210264, 0.46930029, 0.56634774,  0.34392309, 0.81802903, 0.87451660, 0.79274754, 0.20845676, 0.32018370, 0.45122558,  0.71295305, 0.75565644, 0.02974078, 0.90919961)
 
 ```
 
@@ -346,23 +344,23 @@ This formula does not estimate any model. The formula is simply an efficient way
 The number of bootstrap samples to be run. If zero, no bootstraps are done. Bootstrapping is highly recommended because the bootstrapped Kolmogorov-Smirnov test provides correct coverage even when the distributions being compared are not continuous. At least 500 nboots (preferably 1000) are recommended for publication quality p-values.
 
 ```{r}
-MatchBalance(treat~ ave_CAHM + CHAMchallenge + SIS_hand + ufugm + NIHtot + log_mean_time_MA_PA +
-               log_mean_time_LA_PA + EQ_index +grip_MA +grip_LA +RNLIadj+
-
-               CSgender+ concordance +  onset_to_rand + CStpa + age_at_rand +
-               FCtotalOT+ log2.A1EstVol+old_stroke +DEMOsmoke+ leukoaraiosis+ multlesions+
-
-               Site.code.1+ Site.code.2+ Site.code.3+Site.code.4+
-               Site.code.5+ Site.code.6+ Site.code.7+ predominant.AC+
-               predominant.ACH +predominant.basilar+ predominant.IB+
-               predominant.LS+ predominant.MC+ predominant.PCA+
-               predominant.vertebral +predominant.THP+ hispanic.latino+nonhispanic.latino+
-               race.asian+  race.africanam+ race.caucasian +
-               race.other+ edu.noHSdegree +edu.finishHS +edu.someCollege +
-               edu.finishCollege+ stroke.loc.RightH+
-               stroke.loc.LeftH +stroke.loc.cerebellar +stroke.loc.brainstem,
-
-             match.out= rr1, nboots=1000,data= data12)
+# MatchBalance(treat~ ave_CAHM + CHAMchallenge + SIS_hand + ufugm + NIHtot + log_mean_time_MA_PA +
+#                log_mean_time_LA_PA + EQ_index +grip_MA +grip_LA +RNLIadj+
+# 
+#                CSgender+ concordance +  onset_to_rand + CStpa + age_at_rand +
+#                FCtotalOT+ log2.A1EstVol+old_stroke +DEMOsmoke+ leukoaraiosis+ multlesions+
+# 
+#                Site.code.1+ Site.code.2+ Site.code.3+Site.code.4+
+#                Site.code.5+ Site.code.6+ Site.code.7+ predominant.AC+
+#                predominant.ACH +predominant.basilar+ predominant.IB+
+#                predominant.LS+ predominant.MC+ predominant.PCA+
+#                predominant.vertebral +predominant.THP+ hispanic.latino+nonhispanic.latino+
+#                race.asian+  race.africanam+ race.caucasian +
+#                race.other+ edu.noHSdegree +edu.finishHS +edu.someCollege +
+#                edu.finishCollege+ stroke.loc.RightH+
+#                stroke.loc.LeftH +stroke.loc.cerebellar +stroke.loc.brainstem,
+# 
+#              match.out= rr1, nboots=1000,data= data12)
 
 ```
 
@@ -371,23 +369,23 @@ MatchBalance(treat~ ave_CAHM + CHAMchallenge + SIS_hand + ufugm + NIHtot + log_m
 ```{r}
 set.cobalt.options(continuous= "std",binary= "std")
 
-(bal.tab(rr1, treat~ ave_CAHM + CHAMchallenge + SIS_hand + ufugm + NIHtot + log_mean_time_MA_PA +
-               log_mean_time_LA_PA + EQ_index +grip_MA +grip_LA +RNLIadj+
-
-               CSgender+ concordance +  onset_to_rand + CStpa + age_at_rand +
-               FCtotalOT+ log2.A1EstVol+old_stroke +DEMOsmoke+ leukoaraiosis+ multlesions+
-
-               Site.code.1+ Site.code.2+ Site.code.3+Site.code.4+
-               Site.code.5+ Site.code.6+ Site.code.7+ predominant.AC+
-               predominant.ACH +predominant.basilar+ predominant.IB+
-               predominant.LS+ predominant.MC+ predominant.PCA+
-               predominant.vertebral +predominant.THP+ hispanic.latino+nonhispanic.latino+
-               race.asian+ race.pacific+ race.africanam+ race.caucasian +
-               race.other+ edu.noHSdegree +edu.finishHS +edu.someCollege +
-               edu.finishCollege+ stroke.loc.RightH+
-               stroke.loc.LeftH +stroke.loc.cerebellar +stroke.loc.brainstem,
-
-         disp.v.ratio = TRUE, data = data12,abs= TRUE, m.threshold =0.1))
+# (bal.tab(rr1, treat~ ave_CAHM + CHAMchallenge + SIS_hand + ufugm + NIHtot + log_mean_time_MA_PA +
+#                log_mean_time_LA_PA + EQ_index +grip_MA +grip_LA +RNLIadj+
+# 
+#                CSgender+ concordance +  onset_to_rand + CStpa + age_at_rand +
+#                FCtotalOT+ log2.A1EstVol+old_stroke +DEMOsmoke+ leukoaraiosis+ multlesions+
+# 
+#                Site.code.1+ Site.code.2+ Site.code.3+Site.code.4+
+#                Site.code.5+ Site.code.6+ Site.code.7+ predominant.AC+
+#                predominant.ACH +predominant.basilar+ predominant.IB+
+#                predominant.LS+ predominant.MC+ predominant.PCA+
+#                predominant.vertebral +predominant.THP+ hispanic.latino+nonhispanic.latino+
+#                race.asian+ race.africanam+ race.caucasian +
+#                race.other+ edu.noHSdegree +edu.finishHS +edu.someCollege +
+#                edu.finishCollege+ stroke.loc.RightH+
+#                stroke.loc.LeftH +stroke.loc.cerebellar +stroke.loc.brainstem,
+# 
+#          disp.v.ratio = TRUE, data = data12,abs= TRUE, m.threshold =0.1))
 ```
 
 
@@ -464,11 +462,11 @@ X1 = cbind(X,data12$propensity.score)
 ```{r}
 minimump= c()
 
+set.seed(3)
 
-set.seed(1)
-
-
-gen1 = GenMatch(Tr= data12$treat, starting.values = weights, X=X1, pop.size=1000, replace=TRUE, max.weight=1)
+gen1 = GenMatch(Tr= data12$treat, 
+                # starting.values = genweight,
+                X=X1, pop.size=100, replace=TRUE, max.weight=1)
 
 mgen1=Match(Y= data12$sishand_recovery, estimand= "ATT", Tr=data12$treat, X=X1, Weight.matrix = gen1)
 balanceA = MatchBalance(treat~ ave_CAHM + CHAMchallenge + SIS_hand + ufugm + NIHtot + log_mean_time_MA_PA +
@@ -482,7 +480,7 @@ balanceA = MatchBalance(treat~ ave_CAHM + CHAMchallenge + SIS_hand + ufugm + NIH
                predominant.ACH +predominant.basilar+ predominant.IB+
                predominant.LS+ predominant.MC+ predominant.PCA+
                predominant.vertebral +predominant.THP+ hispanic.latino+nonhispanic.latino+
-               race.asia+ race.africanam+ race.caucasian +
+               race.asian+ race.africanam+ race.caucasian +
                race.other+ edu.noHSdegree +edu.finishHS +edu.someCollege +
                edu.finishCollege+ stroke.loc.RightH+
                stroke.loc.LeftH +stroke.loc.cerebellar +stroke.loc.brainstem,
@@ -492,8 +490,6 @@ balanceA = MatchBalance(treat~ ave_CAHM + CHAMchallenge + SIS_hand + ufugm + NIH
 minimump=c(minimump, balanceA$AMsmallest.p.value) 
 
 print(balanceA$AMsmallest.p.value)
-
-
 ```
 
 ####Summary of the model will tell us about Causal relationship
@@ -508,14 +504,14 @@ MatchBalance(treat~ ave_CAHM + CHAMchallenge + SIS_hand + ufugm + NIHtot + log_m
                log_mean_time_LA_PA + EQ_index +grip_MA +grip_LA +RNLIadj+
 
                CSgender+ concordance +  onset_to_rand + CStpa + age_at_rand +
-               FCtotalOT+ log2.A1EstVol+old_stroke +DEMOsmoke+ leukoaraiosis+ multlesions+
+               FCtotalOT+ log2.A1EstVol+ old_stroke + DEMOsmoke+ leukoaraiosis+ multlesions+
 
                Site.code.1+ Site.code.2+ Site.code.3+Site.code.4+
                Site.code.5+ Site.code.6+ Site.code.7+ predominant.AC+
                predominant.ACH +predominant.basilar+ predominant.IB+
                predominant.LS+ predominant.MC+ predominant.PCA+
                predominant.vertebral +predominant.THP+ hispanic.latino+nonhispanic.latino+
-               race.asian++ race.africanam+ race.caucasian +
+               race.asian+ race.africanam+ race.caucasian +
                race.other+ edu.noHSdegree +edu.finishHS +edu.someCollege +
                edu.finishCollege+ stroke.loc.RightH+
                stroke.loc.LeftH +stroke.loc.cerebellar +stroke.loc.brainstem,
