@@ -43,7 +43,7 @@ patChar= read.csv("PatientCharacteristics_withDose.csv")
 rawd= read.csv("Raw Data_Included Subjects Only_mod.csv", sep="\t") # neural values
 library(readr)
 # load("C:/Users/nadir/Desktop/Matching/BKN 599 Advanced Data Analysis/w16dataframe.Rda") #Genetic weights
-genweight = c(0.95728518, 0.75157699, 0.19836472, 0.32882063, 0.37447772, 0.18280747, 0.03318380, 0.24723912, 0.97105001, 0.89760586, 0.52468406, 0.60335013, 0.51471519, 0.61077832, 0.17156698, 0.13696445, 0.27018174, 0.12317546, 0.46834129, 0.01464439, 0.79873410,  0.24452164, 0.73816523, 0.13206673, 0.17273388, 0.47748087, 0.01187614, 0.12391834,  0.18432683, 0.70090786, 0.71827487, 0.22531714, 0.28043835, 0.47606459, 0.08193887, 0.13251869, 0.22342897, 0.04373737, 0.65149348, 0.74210264, 0.46930029, 0.56634774,  0.34392309, 0.81802903, 0.87451660, 0.79274754, 0.20845676, 0.32018370, 0.45122558,  0.71295305, 0.75565644, 0.02974078, 0.90919961)
+genweight = c(0.95728518, 0.75157699, 0.19836472, 0.32882063, 0.37447772, 0.18280747, 0.03318380, 0.24723912, 0.97105001, 0.89760586, 0.52468406, 0.60335013, 0.51471519, 0.61077832, 0.17156698, 0.13696445, 0.27018174, 0.12317546, 0.46834129, 0.01464439, 0.79873410,  0.24452164, 0.73816523, 0.13206673, 0.17273388, 0.47748087, 0.01187614, 0.12391834,  0.18432683, 0.70090786, 0.71827487, 0.22531714, 0.28043835, 0.47606459, 0.08193887, 0.13251869, 0.22342897, 0.04373737, 0.65149348, 0.74210264, 0.46930029, 0.56634774,  0.34392309, 0.81802903, 0.87451660, 0.79274754, 0.20845676, 0.32018370, 0.45122558,  0.71295305, 0.75565644, 0.02974078, 0, 0, 0, 0, 0.90919961)
 
 ```
 
@@ -172,17 +172,17 @@ data12$edu.someCollege= ifelse(data12$DEMOedu== 4, 1, 0)
 # Bachelors, Masters and PhD grads piled into 1 category
 data12$edu.finishCollege= ifelse((data12$DEMOedu== 5)|(data12$DEMOedu== 6)|(data12$DEMOedu== 7), 1, 0)
 
-# Stroke type
-data12$stroke.loc.RightH= ifelse(data12$CSstrkloc==1, 1, 0)
-data12$stroke.loc.LeftH= ifelse(data12$CSstrkloc==2, 1, 0)
-data12$stroke.loc.cerebellar= ifelse(data12$CSstrkloc==3, 1, 0)
-data12$stroke.loc.brainstem= ifelse(data12$CSstrkloc== 4, 1, 0)
-
 # Stroke location
 data12$stroke.loc.RightH= ifelse(data12$CSstrkloc==1, 1, 0)
 data12$stroke.loc.LeftH= ifelse(data12$CSstrkloc==2, 1, 0)
 data12$stroke.loc.cerebellar= ifelse(data12$CSstrkloc==3, 1, 0)
 data12$stroke.loc.brainstem= ifelse(data12$CSstrkloc== 4, 1, 0)
+
+# Stroke type
+data12$stroke.type.ISCHEMIC.wo.hemorrhagic.conversion= ifelse(data12$CSstrktype==1, 1, 0)
+data12$stroke.type.ISCHEMIC.with.hemorrhagic.conversion= ifelse(data12$CSstrktype==2, 1, 0)
+data12$stroke.type.intraparenchymal.HEMORRHAGIC= ifelse(data12$CSstrktype==3, 1, 0)
+data12$stroke.type.other= ifelse(data12$CSstrkloc== 4, 1, 0)
 
 #Remove extra columns and extra variables
 data12$DEMOedu=NULL
@@ -246,10 +246,9 @@ lowdosegroup= subset(data12, treat==1)
 
 ### Propensity Score Matching code starts here
 
-creates a marrix from columns/features
+creates a matrix from columns/features
 ```{r}
-# X= data.matrix(data12[,c(2:11,13:53)])
-X= data.matrix(data12[,c(2:12,14:54)])
+X= data.matrix(data12[,c(2:12,14:58)])
 ```
 
 
@@ -392,7 +391,6 @@ set.cobalt.options(continuous= "std",binary= "std")
 ### Looking at distributions of all continuous variables
 ```{r}
 columns = colnames(data12)
-# for (i in c(2:11,13,15,17,20)){
 for (i in c(2:12,14,16,18,21)){
   string= columns[i]
   
@@ -462,11 +460,11 @@ X1 = cbind(X,data12$propensity.score)
 ```{r}
 minimump= c()
 
-set.seed(3)
+set.seed(2)
 
 gen1 = GenMatch(Tr= data12$treat, 
-                # starting.values = genweight,
-                X=X1, pop.size=100, replace=TRUE, max.weight=1)
+                starting.values = genweight,
+                X=X1, pop.size=200, replace=TRUE, max.weight=1)
 
 mgen1=Match(Y= data12$sishand_recovery, estimand= "ATT", Tr=data12$treat, X=X1, Weight.matrix = gen1)
 balanceA = MatchBalance(treat~ ave_CAHM + CHAMchallenge + SIS_hand + ufugm + NIHtot + log_mean_time_MA_PA +
@@ -476,14 +474,18 @@ balanceA = MatchBalance(treat~ ave_CAHM + CHAMchallenge + SIS_hand + ufugm + NIH
                FCtotalOT+ log2.A1EstVol+old_stroke +DEMOsmoke+ leukoaraiosis+ multlesions+
 
                Site.code.1+ Site.code.2+ Site.code.3+Site.code.4+
-               Site.code.5+ Site.code.6+ Site.code.7+ predominant.AC+
-               predominant.ACH +predominant.basilar+ predominant.IB+
-               predominant.LS+ predominant.MC+ predominant.PCA+
-               predominant.vertebral +predominant.THP+ hispanic.latino+nonhispanic.latino+
-               race.asian+ race.africanam+ race.caucasian +
-               race.other+ edu.noHSdegree +edu.finishHS +edu.someCollege +
-               edu.finishCollege+ stroke.loc.RightH+
-               stroke.loc.LeftH +stroke.loc.cerebellar +stroke.loc.brainstem,
+               Site.code.5+ Site.code.6+ Site.code.7+ 
+               predominant.AC+ predominant.ACH +predominant.basilar+ 
+               predominant.IB+ predominant.LS+ predominant.MC+ predominant.PCA+
+               predominant.vertebral +predominant.THP+ 
+                 hispanic.latino+ nonhispanic.latino+
+               race.asian+ race.africanam + race.caucasian + race.other+ 
+                 edu.noHSdegree + edu.finishHS + edu.someCollege + edu.finishCollege+ 
+               stroke.loc.RightH+ stroke.loc.LeftH +stroke.loc.cerebellar +stroke.loc.brainstem
+               +stroke.type.ISCHEMIC.wo.hemorrhagic.conversion+
+               stroke.type.ISCHEMIC.with.hemorrhagic.conversion +
+               stroke.type.intraparenchymal.HEMORRHAGIC + stroke.type.other
+               ,
              
                data= data12, match.out= mgen1, nboots=1000)
 
