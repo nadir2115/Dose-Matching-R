@@ -42,8 +42,12 @@ evalData=read.csv("00042_evalDataset_notext.csv")
 patChar= read.csv("PatientCharacteristics_withDose.csv")
 rawd= read.csv("Raw Data_Included Subjects Only_mod.csv", sep="\t") # neural values
 library(readr)
-# load("C:/Users/nadir/Desktop/Matching/BKN 599 Advanced Data Analysis/w16dataframe.Rda") #Genetic weights
-genweight = c(0.95728518, 0.75157699, 0.19836472, 0.32882063, 0.37447772, 0.18280747, 0.03318380, 0.24723912, 0.97105001, 0.89760586, 0.52468406, 0.60335013, 0.51471519, 0.61077832, 0.17156698, 0.13696445, 0.27018174, 0.12317546, 0.46834129, 0.01464439, 0.79873410,  0.24452164, 0.73816523, 0.13206673, 0.17273388, 0.47748087, 0.01187614, 0.12391834,  0.18432683, 0.70090786, 0.71827487, 0.22531714, 0.28043835, 0.47606459, 0.08193887, 0.13251869, 0.22342897, 0.04373737, 0.65149348, 0.74210264, 0.46930029, 0.56634774,  0.34392309, 0.81802903, 0.87451660, 0.79274754, 0.20845676, 0.32018370, 0.45122558,  0.71295305, 0.75565644, 0.02974078, 0, 0, 0, 0, 0.90919961)
+
+
+genweight= c(0.97736335, 0.68557564, 0.11435119, 0.55160536, 0.95083754, 0.04852164, 0.14841358, 0.19860284, 0.79674611, 0.79042807, 0.62237024, 0.01534745, 0.32553671, 0.19962585, 0.64700365, 0.15999446, 0.12968842, 0.02935539, 0.45110192, 0.16812796, 0.51002147, 0.81456330, 0.59208731, 0.20140278, 0.26642759, 0.15331324, 0.34255925, 0.37867908, 0.01936102, 0.06611066, 0.47779205, 0.38559177, 0.88105505, 0.94637622, 0.11744363, 0.29967114, 0.29017548, 0.37624276, 0.83526589, 0.84839756, 0.46941722, 0.21737904, 0.40772396, 0.28270889, 0.78696707, 0.75454488, 0.08591095, 0.56542856, 0.79789390, 0.90011766, 0.50598825, 0.31844054, 0.84565483, 0.59102811, 0.51581391, 0.11314781, 0.70154351)
+
+# propensity score excluded- last covariate weight = 0 not 0.90919961 or 1
+# removing 57th weight and propensity score improves p value for genetic matching
 
 ```
 
@@ -277,14 +281,24 @@ A character string for the estimand. The default estimand is "ATT", the sample a
 - M = 1
 A scalar for the number of matches which should be found. The default is one-to-one matching. Also see the ties option
 
-
 -replace = TRUE
 Matching with replacement
+
+
 
 ####Matching using ATT 
 ```{r}
 rr1 =Match(Tr= data12$treat, X= model$fitted.values, estimand = "ATT", 
-           M=1, ties= FALSE, replace= TRUE)
+           M=1, BiasAdjust = TRUE, ties = TRUE, replace= TRUE)
+
+# NOTE ON TIES = TRUE
+# ties- A logical flag for whether ties should be handled deterministically. By default
+# ties==TRUE. If, for example, one treated observation matches more than one
+# control observation, the matched dataset will include the multiple matched control observations and the matched data will be weighted to reflect the multiple
+# matches. The sum of the weighted observations will still equal the original
+# number of observations. If ties==FALSE, ties will be randomly broken. If the
+# dataset is large and there are many ties, setting ties=FALSE often results in a
+# large speedup. Whether two potential matches are close enough to be considered tied, is controlled by the distance.tolerance option.
 ```
 
 
@@ -300,7 +314,7 @@ plot1<-ggplot(data12, aes(propensity.score)) +
   geom_histogram(data = subset(data12,treat == '0'),fill = "blue", alpha = 0.2,binwidth=0.04)+
   geom_density(data = subset(data12,treat == '1'),fill = "red", alpha = 0.2)+
   geom_density(data = subset(data12,treat == '0'),fill = "blue", alpha = 0.2)+
-  ggtitle("Low Dose (Red) vs Unmatched High Dose(Blue)")+
+  ggtitle("Low Dose (Red) vs Unmatched High Dose (Blue)")+
   xlab("P(Subject in Low Dose group | covariates)")+
   xlim(c(0,1))+
   ylim(c(0,23))+
@@ -311,7 +325,7 @@ plot2<-ggplot(data12, aes(propensity.score)) +
   geom_histogram(data= data12[rr1$index.control,],fill = "blue", alpha = 0.2,binwidth=0.04)+
   geom_density(data = data12[rr1$index.treated,],fill = "red", alpha = 0.2)+
   geom_density(data = data12[rr1$index.control,],fill = "blue", alpha = 0.2)+
-  ggtitle("Low Dose (Red) vs Matched High Dose(Blue)")+
+  ggtitle("Low Dose (Red) vs Matched High Dose (Blue)")+
   xlab("P(Subject in Low Dose group | covariates)")+
   xlim(c(0,1))+
   ylim(c(0,23))+
@@ -330,9 +344,6 @@ length(unique(rr1$index.control))
 ```
 
 
-
-
-
 ### Assessing balance
 "MatchBalance" is used to determine if Match was successful in achieving balance on the observed covariates.
 
@@ -343,48 +354,58 @@ This formula does not estimate any model. The formula is simply an efficient way
 The number of bootstrap samples to be run. If zero, no bootstraps are done. Bootstrapping is highly recommended because the bootstrapped Kolmogorov-Smirnov test provides correct coverage even when the distributions being compared are not continuous. At least 500 nboots (preferably 1000) are recommended for publication quality p-values.
 
 ```{r}
-# MatchBalance(treat~ ave_CAHM + CHAMchallenge + SIS_hand + ufugm + NIHtot + log_mean_time_MA_PA +
-#                log_mean_time_LA_PA + EQ_index +grip_MA +grip_LA +RNLIadj+
-# 
-#                CSgender+ concordance +  onset_to_rand + CStpa + age_at_rand +
-#                FCtotalOT+ log2.A1EstVol+old_stroke +DEMOsmoke+ leukoaraiosis+ multlesions+
-# 
-#                Site.code.1+ Site.code.2+ Site.code.3+Site.code.4+
-#                Site.code.5+ Site.code.6+ Site.code.7+ predominant.AC+
-#                predominant.ACH +predominant.basilar+ predominant.IB+
-#                predominant.LS+ predominant.MC+ predominant.PCA+
-#                predominant.vertebral +predominant.THP+ hispanic.latino+nonhispanic.latino+
-#                race.asian+  race.africanam+ race.caucasian +
-#                race.other+ edu.noHSdegree +edu.finishHS +edu.someCollege +
-#                edu.finishCollege+ stroke.loc.RightH+
-#                stroke.loc.LeftH +stroke.loc.cerebellar +stroke.loc.brainstem,
-# 
-#              match.out= rr1, nboots=1000,data= data12)
+MatchBalance(treat~ ave_CAHM + CHAMchallenge + SIS_hand + ufugm + NIHtot + log_mean_time_MA_PA +
+               log_mean_time_LA_PA + EQ_index +grip_MA +grip_LA +RNLIadj+
+
+               CSgender+ concordance +  onset_to_rand + CStpa + age_at_rand +
+               FCtotalOT+ log2.A1EstVol+old_stroke +DEMOsmoke+ leukoaraiosis+ multlesions+
+
+               Site.code.1+ Site.code.2+ Site.code.3+Site.code.4+
+               Site.code.5+ Site.code.6+ Site.code.7+ 
+               
+               predominant.AC+ predominant.ACH +predominant.basilar+ predominant.IB+
+               predominant.LS+ predominant.MC+ predominant.PCA+
+               predominant.vertebral +predominant.THP+ hispanic.latino+nonhispanic.latino+
+               
+               race.asian+  race.africanam+ race.caucasian + race.other+ 
+               
+               edu.noHSdegree +edu.finishHS +edu.someCollege + edu.finishCollege+ 
+               
+               stroke.loc.RightH+ stroke.loc.LeftH +stroke.loc.cerebellar +stroke.loc.brainstem+
+               
+               stroke.type.ISCHEMIC.wo.hemorrhagic.conversion+
+               stroke.type.ISCHEMIC.with.hemorrhagic.conversion +
+               stroke.type.intraparenchymal.HEMORRHAGIC + stroke.type.other +
+               propensity.score,
+
+             match.out= rr1, nboots=1000,data= data12)
 
 ```
 
 
 ## Cobalt package for assessing balance
 ```{r}
-set.cobalt.options(continuous= "std",binary= "std")
+set.cobalt.options(continuous= "std",binary= "std", disp.means= TRUE)
 
-# (bal.tab(rr1, treat~ ave_CAHM + CHAMchallenge + SIS_hand + ufugm + NIHtot + log_mean_time_MA_PA +
-#                log_mean_time_LA_PA + EQ_index +grip_MA +grip_LA +RNLIadj+
-# 
-#                CSgender+ concordance +  onset_to_rand + CStpa + age_at_rand +
-#                FCtotalOT+ log2.A1EstVol+old_stroke +DEMOsmoke+ leukoaraiosis+ multlesions+
-# 
-#                Site.code.1+ Site.code.2+ Site.code.3+Site.code.4+
-#                Site.code.5+ Site.code.6+ Site.code.7+ predominant.AC+
-#                predominant.ACH +predominant.basilar+ predominant.IB+
-#                predominant.LS+ predominant.MC+ predominant.PCA+
-#                predominant.vertebral +predominant.THP+ hispanic.latino+nonhispanic.latino+
-#                race.asian+ race.africanam+ race.caucasian +
-#                race.other+ edu.noHSdegree +edu.finishHS +edu.someCollege +
-#                edu.finishCollege+ stroke.loc.RightH+
-#                stroke.loc.LeftH +stroke.loc.cerebellar +stroke.loc.brainstem,
-# 
-#          disp.v.ratio = TRUE, data = data12,abs= TRUE, m.threshold =0.1))
+(bal.tab(rr1, treat~ ave_CAHM + CHAMchallenge + SIS_hand + ufugm + NIHtot + log_mean_time_MA_PA +
+               log_mean_time_LA_PA + EQ_index +grip_MA +grip_LA +RNLIadj+
+
+               CSgender+ concordance +  onset_to_rand + CStpa + age_at_rand +
+               FCtotalOT+ log2.A1EstVol+old_stroke +DEMOsmoke+ leukoaraiosis+ multlesions+
+
+               Site.code.1+ Site.code.2+ Site.code.3+Site.code.4+
+               Site.code.5+ Site.code.6+ Site.code.7+ predominant.AC+
+               predominant.ACH +predominant.basilar+ predominant.IB+
+               predominant.LS+ predominant.MC+ predominant.PCA+
+               predominant.vertebral +predominant.THP+ hispanic.latino+nonhispanic.latino+
+               race.asian+ race.africanam+ race.caucasian +
+               race.other+ edu.noHSdegree +edu.finishHS +edu.someCollege +
+               edu.finishCollege+ stroke.loc.RightH+
+               stroke.loc.LeftH +stroke.loc.cerebellar +stroke.loc.brainstem+
+           propensity.score,
+
+         disp.v.ratio = TRUE, data = data12,abs= TRUE, m.threshold =0.2))
+
 ```
 
 
@@ -460,33 +481,39 @@ X1 = cbind(X,data12$propensity.score)
 ```{r}
 minimump= c()
 
-set.seed(2)
+set.seed(1)
 
 gen1 = GenMatch(Tr= data12$treat, 
                 starting.values = genweight,
-                X=X1, pop.size=200, replace=TRUE, max.weight=1)
+                X=X1, pop.size=1000, replace=TRUE, max.weight=1)
 
-mgen1=Match(Y= data12$sishand_recovery, estimand= "ATT", Tr=data12$treat, X=X1, Weight.matrix = gen1)
-balanceA = MatchBalance(treat~ ave_CAHM + CHAMchallenge + SIS_hand + ufugm + NIHtot + log_mean_time_MA_PA +
-               log_mean_time_LA_PA + EQ_index +grip_MA +grip_LA +RNLIadj+
+mgen1=Match(Y= data12$sishand_recovery,BiasAdjust = TRUE, estimand= "ATT", Tr=data12$treat, X=X1, Weight.matrix = gen1)
+
+balanceA = MatchBalance(treat~ ave_CAHM + CHAMchallenge + SIS_hand + ufugm + 
+               NIHtot + log_mean_time_MA_PA + log_mean_time_LA_PA + EQ_index +
+                grip_MA +grip_LA +RNLIadj+
 
                CSgender+ concordance +  onset_to_rand + CStpa + age_at_rand +
                FCtotalOT+ log2.A1EstVol+old_stroke +DEMOsmoke+ leukoaraiosis+ multlesions+
 
                Site.code.1+ Site.code.2+ Site.code.3+Site.code.4+
-               Site.code.5+ Site.code.6+ Site.code.7+ 
-               predominant.AC+ predominant.ACH +predominant.basilar+ 
-               predominant.IB+ predominant.LS+ predominant.MC+ predominant.PCA+
+               Site.code.5+ Site.code.6+ Site.code.7+ predominant.AC+
+               predominant.ACH +predominant.basilar+ predominant.IB+
+               predominant.LS+ predominant.MC+ predominant.PCA+
                predominant.vertebral +predominant.THP+ 
-                 hispanic.latino+ nonhispanic.latino+
-               race.asian+ race.africanam + race.caucasian + race.other+ 
-                 edu.noHSdegree + edu.finishHS + edu.someCollege + edu.finishCollege+ 
-               stroke.loc.RightH+ stroke.loc.LeftH +stroke.loc.cerebellar +stroke.loc.brainstem
-               +stroke.type.ISCHEMIC.wo.hemorrhagic.conversion+
+               
+                hispanic.latino+nonhispanic.latino+
+               race.asian+ race.africanam+ race.caucasian + race.other+ 
+                 
+                 edu.noHSdegree +edu.finishHS +edu.someCollege + edu.finishCollege+ 
+              
+                 stroke.loc.RightH+ stroke.loc.LeftH +stroke.loc.cerebellar +stroke.loc.brainstem+
+               stroke.type.ISCHEMIC.wo.hemorrhagic.conversion+
                stroke.type.ISCHEMIC.with.hemorrhagic.conversion +
                stroke.type.intraparenchymal.HEMORRHAGIC + stroke.type.other
-               ,
-             
+           # + propensity.score
+           ,
+               
                data= data12, match.out= mgen1, nboots=1000)
 
 minimump=c(minimump, balanceA$AMsmallest.p.value) 
@@ -516,7 +543,8 @@ MatchBalance(treat~ ave_CAHM + CHAMchallenge + SIS_hand + ufugm + NIHtot + log_m
                race.asian+ race.africanam+ race.caucasian +
                race.other+ edu.noHSdegree +edu.finishHS +edu.someCollege +
                edu.finishCollege+ stroke.loc.RightH+
-               stroke.loc.LeftH +stroke.loc.cerebellar +stroke.loc.brainstem,
+               stroke.loc.LeftH +stroke.loc.cerebellar +stroke.loc.brainstem+
+               propensity.score,
              
                data= data12, match.out= mgen1, nboots=1000)
 
@@ -532,6 +560,8 @@ length(unique(mgen1$index.control))
 ```
 
 ```{r}
+
+
 (bal.tab(mgen1, treat~ ave_CAHM + CHAMchallenge + SIS_hand + ufugm + NIHtot + log_mean_time_MA_PA +
                log_mean_time_LA_PA + EQ_index +grip_MA +grip_LA +RNLIadj+
 
@@ -543,12 +573,12 @@ length(unique(mgen1$index.control))
                predominant.ACH +predominant.basilar+ predominant.IB+
                predominant.LS+ predominant.MC+ predominant.PCA+
                predominant.vertebral +predominant.THP+ hispanic.latino+nonhispanic.latino+
-               race.asian+ race.pacific+ race.africanam+ race.caucasian +
+               race.asian+ race.africanam+ race.caucasian +
                race.other+ edu.noHSdegree +edu.finishHS +edu.someCollege +
                edu.finishCollege+ stroke.loc.RightH+
-               stroke.loc.LeftH +stroke.loc.cerebellar +stroke.loc.brainstem+ propensity.score,
-         
-         disp.v.ratio = TRUE, data = data12,abs= TRUE, m.threshold =0.1))
+               stroke.loc.LeftH +stroke.loc.cerebellar +stroke.loc.brainstem,
+
+         disp.v.ratio = TRUE, data = data12,abs= TRUE, m.threshold =0.2))
 ```
 
 
@@ -563,7 +593,7 @@ for (i in c(2:12,14,16,18,21)){
   plot1<-ggplot(data12, aes(eval(parse(text = string)))) +
     geom_histogram(data= data12[mgen1$index.treated,],fill="red",alpha =0.2, binwidth=b)+
     geom_histogram(data= data12[-mgen1$index.treated,],fill="blue",alpha =0.2, binwidth=b)+
-    ggtitle("Low Dose(Red) vs Unmatched High Dose(Blue)")+
+    ggtitle("Low Dose(Red) vs Unmatched High Dose (Blue)")+
     theme(plot.title = element_text(face="bold", size=10)) +
     xlab(paste(string, "histogram"))+
     coord_cartesian(ylim=c(0,35))+
@@ -572,7 +602,7 @@ for (i in c(2:12,14,16,18,21)){
   plot2<- ggplot(data12, aes(eval(parse(text = string)))) +
     geom_histogram(data= data12[mgen1$index.treated,],fill="red",alpha =0.2, binwidth=b)+
     geom_histogram(data= data12[mgen1$index.control,],fill="blue",alpha =0.2, binwidth=b)+
-    ggtitle("Low Dose(Red) vs Matched High Dose(Blue)")+
+    ggtitle("Low Dose(Red) vs Matched High Dose (Blue)")+
     theme(plot.title = element_text( face="bold", size=10)) +
     xlab(paste(string, "histogram"))+
     coord_cartesian(ylim=c(0,35))+
@@ -581,7 +611,7 @@ for (i in c(2:12,14,16,18,21)){
    plot3<-ggplot(data12, aes(eval(parse(text = string)))) +
     geom_density(data = data12[mgen1$index.treated,],fill = "red", alpha = 0.2)+
     geom_density(data = data12[-mgen1$index.treated,],fill = "blue", alpha = 0.2)+
-    ggtitle("Low Dose(Red) vs Unmatched High Dose(Blue)")+
+    ggtitle("Low Dose(Red) vs Unmatched High Dose (Blue)")+
     theme(plot.title = element_text(face="bold", size=10)) +
     xlab(paste(string, "density"))+
     xlim(min(data12[,i]),max(data12[,i]))
@@ -589,7 +619,7 @@ for (i in c(2:12,14,16,18,21)){
    plot4<-ggplot(data12, aes(eval(parse(text = string)))) +
     geom_density(data = data12[mgen1$index.treated,],fill = "red", alpha = 0.2)+
     geom_density(data = data12[mgen1$index.control,],fill = "blue", alpha = 0.2)+
-    ggtitle("Low Dose(Red) vs Matched High Dose(Blue)")+
+    ggtitle("Low Dose(Red) vs Matched High Dose (Blue)")+
     theme(plot.title = element_text(face="bold", size=10)) +
     xlab(paste(string, "density"))+
     xlim(min(data12[,i]),max(data12[,i]))
