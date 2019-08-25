@@ -46,8 +46,7 @@ library(readr)
 
 genweight= c(0.97736335, 0.68557564, 0.11435119, 0.55160536, 0.95083754, 0.04852164, 0.14841358, 0.19860284, 0.79674611, 0.79042807, 0.62237024, 0.01534745, 0.32553671, 0.19962585, 0.64700365, 0.15999446, 0.12968842, 0.02935539, 0.45110192, 0.16812796, 0.51002147, 0.81456330, 0.59208731, 0.20140278, 0.26642759, 0.15331324, 0.34255925, 0.37867908, 0.01936102, 0.06611066, 0.47779205, 0.38559177, 0.88105505, 0.94637622, 0.11744363, 0.29967114, 0.29017548, 0.37624276, 0.83526589, 0.84839756, 0.46941722, 0.21737904, 0.40772396, 0.28270889, 0.78696707, 0.75454488, 0.08591095, 0.56542856, 0.79789390, 0.90011766, 0.50598825, 0.31844054, 0.84565483, 0.59102811, 0.51581391, 0.11314781, 0.70154351)
 
-# propensity score excluded- last covariate weight = 0 not 0.90919961 or 1
-# removing 57th weight and propensity score improves p value for genetic matching
+
 
 ```
 
@@ -64,7 +63,7 @@ patChar=rename(patChar, pid= PID )
 rawd=rename(rawd, pid= Study_id )
 ```
 
-### Examining Matchnig features from EvalData visit 1 scores
+### Examining Matching features from EvalData visit 1 scores
 ```{r}
 # evalData.cnames= data.frame(colnames(evalData))
 # pc.cnames= data.frame(colnames(patChar))
@@ -234,9 +233,21 @@ data12$treat=ifelse(data12$dose_hours<=27, 1, 0)
 ```
 
 
-### This line removes all subjects between 16-29 hours of dosage
+### This line removes all subjects between 16-29 hours of dosage and changes starting weights
 ```{r}
 # data12=data12[data12$dose_hours>=Hthreshold | data12$dose_hours<=Lthreshold,]
+# 
+# genweight = c(0.830426260, 0.724817864, 0.651582563, 0.297741502, 0.830889340, 0.087003014,
+#  0.638399491, 0.121175618, 0.969273674, 0.785379687, 0.190612974, 0.816637110,
+#  0.880788106, 0.631580992, 0.599959964, 0.437396421, 0.300651108, 0.942747991,
+#  0.034287552, 0.447049238, 0.943430585, 0.214020309, 0.831556053, 0.204920316,
+#  0.834063460, 0.265514404, 0.025610668, 0.149471313, 0.796257628, 0.333164340,
+#  0.744276975, 0.136378485, 0.624898450, 0.736891277, 0.045765780, 0.510092046,
+#  0.742510688, 0.958445071, 0.628410029, 0.566133301, 0.190156881, 0.155908728,
+#  0.191743071, 0.058801373, 0.342044210, 0.396892759, 0.122116592, 0.107519303,
+#  0.420979936, 0.087684545, 0.404056359, 0.005771743, 0.650855758, 0.224358681,
+#  0.666497053, 0.120712778, 0.875230230)
+
 ```
 
 
@@ -256,7 +267,7 @@ X= data.matrix(data12[,c(2:12,14:58)])
 ```
 
 
-### Calculating the propensity score
+### Calculating the propensity score and adding it to data set
 Generalized linear models are fit using the glm( ) function.
 treat ~ X means treat is the response of all other variables
 treat is a binary factor and Family objects provide a convenient way to specify the details of the models used by functions such as glm
@@ -265,6 +276,7 @@ family= binomial() specifies that Logistic Regression is to be performed
 
 ```{r}
 model <- glm(treat ~ X,    family = binomial(), data = data12 )
+data12$propensity.score= model$fitted.values
 ```
 
 
@@ -285,179 +297,6 @@ A scalar for the number of matches which should be found. The default is one-to-
 Matching with replacement
 
 
-
-####Matching using ATT 
-```{r}
-rr1 =Match(Tr= data12$treat, X= model$fitted.values, estimand = "ATT", 
-           M=1, BiasAdjust = TRUE, ties = TRUE, replace= TRUE)
-
-# NOTE ON TIES = TRUE
-# ties- A logical flag for whether ties should be handled deterministically. By default
-# ties==TRUE. If, for example, one treated observation matches more than one
-# control observation, the matched dataset will include the multiple matched control observations and the matched data will be weighted to reflect the multiple
-# matches. The sum of the weighted observations will still equal the original
-# number of observations. If ties==FALSE, ties will be randomly broken. If the
-# dataset is large and there are many ties, setting ties=FALSE often results in a
-# large speedup. Whether two potential matches are close enough to be considered tied, is controlled by the distance.tolerance option.
-```
-
-
-### Exploring propensity score distributions
-
-```{r}
-data12$propensity.score= model$fitted.values
-
-library(gridExtra)
-
-plot1<-ggplot(data12, aes(propensity.score)) +
-  geom_histogram(data = subset(data12,treat == '1'),fill = "red", alpha = 0.2,binwidth=0.04)+
-  geom_histogram(data = subset(data12,treat == '0'),fill = "blue", alpha = 0.2,binwidth=0.04)+
-  geom_density(data = subset(data12,treat == '1'),fill = "red", alpha = 0.2)+
-  geom_density(data = subset(data12,treat == '0'),fill = "blue", alpha = 0.2)+
-  ggtitle("Low Dose (Red) vs Unmatched High Dose (Blue)")+
-  xlab("P(Subject in Low Dose group | covariates)")+
-  xlim(c(0,1))+
-  ylim(c(0,23))+
-  theme(plot.title = element_text(size = 10, face = "bold"))
-
-plot2<-ggplot(data12, aes(propensity.score)) +
-  geom_histogram(data= data12[rr1$index.treated,],fill = "red", alpha = 0.2,binwidth=0.04)+
-  geom_histogram(data= data12[rr1$index.control,],fill = "blue", alpha = 0.2,binwidth=0.04)+
-  geom_density(data = data12[rr1$index.treated,],fill = "red", alpha = 0.2)+
-  geom_density(data = data12[rr1$index.control,],fill = "blue", alpha = 0.2)+
-  ggtitle("Low Dose (Red) vs Matched High Dose (Blue)")+
-  xlab("P(Subject in Low Dose group | covariates)")+
-  xlim(c(0,1))+
-  ylim(c(0,23))+
-  theme(plot.title = element_text(size = 10, face = "bold"))
-
-grid.arrange(plot1, plot2, ncol=2)
-
-```
-
-
-####Checking unique values of matched subjects
-```{r}
-length(unique(rr1$index.treated))
-length(unique(rr1$index.control))
-
-```
-
-
-### Assessing balance
-"MatchBalance" is used to determine if Match was successful in achieving balance on the observed covariates.
-
--treat~SIS_hand+ ...
-This formula does not estimate any model. The formula is simply an efficient way to use the R modeling language to list the variables we wish to obtain univariate balance statistics for. The dependent variable in the formula is usually the treatment indicator
-
--nboots= 1000
-The number of bootstrap samples to be run. If zero, no bootstraps are done. Bootstrapping is highly recommended because the bootstrapped Kolmogorov-Smirnov test provides correct coverage even when the distributions being compared are not continuous. At least 500 nboots (preferably 1000) are recommended for publication quality p-values.
-
-```{r}
-MatchBalance(treat~ ave_CAHM + CHAMchallenge + SIS_hand + ufugm + NIHtot + log_mean_time_MA_PA +
-               log_mean_time_LA_PA + EQ_index +grip_MA +grip_LA +RNLIadj+
-
-               CSgender+ concordance +  onset_to_rand + CStpa + age_at_rand +
-               FCtotalOT+ log2.A1EstVol+old_stroke +DEMOsmoke+ leukoaraiosis+ multlesions+
-
-               Site.code.1+ Site.code.2+ Site.code.3+Site.code.4+
-               Site.code.5+ Site.code.6+ Site.code.7+ 
-               
-               predominant.AC+ predominant.ACH +predominant.basilar+ predominant.IB+
-               predominant.LS+ predominant.MC+ predominant.PCA+
-               predominant.vertebral +predominant.THP+ hispanic.latino+nonhispanic.latino+
-               
-               race.asian+  race.africanam+ race.caucasian + race.other+ 
-               
-               edu.noHSdegree +edu.finishHS +edu.someCollege + edu.finishCollege+ 
-               
-               stroke.loc.RightH+ stroke.loc.LeftH +stroke.loc.cerebellar +stroke.loc.brainstem+
-               
-               stroke.type.ISCHEMIC.wo.hemorrhagic.conversion+
-               stroke.type.ISCHEMIC.with.hemorrhagic.conversion +
-               stroke.type.intraparenchymal.HEMORRHAGIC + stroke.type.other +
-               propensity.score,
-
-             match.out= rr1, nboots=1000,data= data12)
-
-```
-
-
-## Cobalt package for assessing balance
-```{r}
-set.cobalt.options(continuous= "std",binary= "std", disp.means= TRUE)
-
-(bal.tab(rr1, treat~ ave_CAHM + CHAMchallenge + SIS_hand + ufugm + NIHtot + log_mean_time_MA_PA +
-               log_mean_time_LA_PA + EQ_index +grip_MA +grip_LA +RNLIadj+
-
-               CSgender+ concordance +  onset_to_rand + CStpa + age_at_rand +
-               FCtotalOT+ log2.A1EstVol+old_stroke +DEMOsmoke+ leukoaraiosis+ multlesions+
-
-               Site.code.1+ Site.code.2+ Site.code.3+Site.code.4+
-               Site.code.5+ Site.code.6+ Site.code.7+ predominant.AC+
-               predominant.ACH +predominant.basilar+ predominant.IB+
-               predominant.LS+ predominant.MC+ predominant.PCA+
-               predominant.vertebral +predominant.THP+ hispanic.latino+nonhispanic.latino+
-               race.asian+ race.africanam+ race.caucasian +
-               race.other+ edu.noHSdegree +edu.finishHS +edu.someCollege +
-               edu.finishCollege+ stroke.loc.RightH+
-               stroke.loc.LeftH +stroke.loc.cerebellar +stroke.loc.brainstem+
-           propensity.score,
-
-         disp.v.ratio = TRUE, data = data12,abs= TRUE, m.threshold =0.2))
-
-```
-
-
-### Looking at distributions of all continuous variables
-```{r}
-columns = colnames(data12)
-for (i in c(2:12,14,16,18,21)){
-  string= columns[i]
-  
-  b= max(data12[,i])/25
-  
-  plot1<-ggplot(data12, aes(eval(parse(text = string)))) +
-    geom_histogram(data= data12[rr1$index.treated,],fill="red",alpha =0.2, binwidth=b)+
-    geom_histogram(data= data12[-rr1$index.treated,],fill="blue",alpha =0.2, binwidth=b)+
-    ggtitle("Low Dose(Red) vs Unmatched High Dose(Blue)")+
-    theme(plot.title = element_text(face="bold", size=10)) +
-    xlab(paste(string, "histogram"))+
-    coord_cartesian(ylim=c(0,35))+
-    xlim(min(data12[,i]),max(data12[,i]))
-  
-  plot2<- ggplot(data12, aes(eval(parse(text = string)))) +
-    geom_histogram(data= data12[rr1$index.treated,],fill="red",alpha =0.2, binwidth=b)+
-    geom_histogram(data= data12[rr1$index.control,],fill="blue",alpha =0.2, binwidth=b)+
-    ggtitle("Low Dose(Red) vs Matched High Dose(Blue)")+
-    theme(plot.title = element_text( face="bold", size=10)) +
-    xlab(paste(string, "histogram"))+
-    coord_cartesian(ylim=c(0,35))+
-    xlim(min(data12[,i]),max(data12[,i]))
-  
-   plot3<-ggplot(data12, aes(eval(parse(text = string)))) +
-    geom_density(data = data12[rr1$index.treated,],fill = "red", alpha = 0.2)+
-    geom_density(data = data12[-rr1$index.treated,],fill = "blue", alpha = 0.2)+
-    ggtitle("Low Dose(Red) vs Unmatched High Dose(Blue)")+
-    theme(plot.title = element_text(face="bold", size=10)) +
-    xlab(paste(string, "density"))+
-    xlim(min(data12[,i]),max(data12[,i]))
-   
-   plot4<-ggplot(data12, aes(eval(parse(text = string)))) +
-    geom_density(data = data12[rr1$index.treated,],fill = "red", alpha = 0.2)+
-    geom_density(data = data12[rr1$index.control,],fill = "blue", alpha = 0.2)+
-    ggtitle("Low Dose(Red) vs Matched High Dose(Blue)")+
-    theme(plot.title = element_text(face="bold", size=10)) +
-    xlab(paste(string, "density"))+
-    xlim(min(data12[,i]),max(data12[,i]))
-  
-  grid.arrange(plot1, plot2, plot3, plot4, ncol=2, nrow=2)
-}
-
-```
-
-
-
 ### Genetic matching 
 This function finds optimal balance using multivariate matching where a genetic search algorithm determines the weight each covariate is given. Balance is determined by examining cumulative probability distribution functions of a variety of standardized statistics. By default, these statistics include t-tests and Kolmogorov-Smirnov tests. A variety of descriptive statistics based on empirical-QQ (eQQ) plots can also be used or any user provided measure of balance. The statistics are not used to conduct formal hypothesis tests, because no measure of balance is a monotonic function of bias and because balance should be maximized without limit. The object returned by GenMatch can be supplied to the Match function (via the Weight.matrix option) to obtain causal estimates. GenMatch uses **GENoud** to perform the genetic search. 
 - Tr= data12$treat
@@ -471,24 +310,39 @@ Population Size. This is the number of individuals genoud uses to solve the opti
 Genoud is a function that combines evolutionary search algorithms with derivative-based (Newton or quasi-Newton) methods to solve difficult optimization problems.
 
 
+# Adding propensity score to feature matrix used for for genetic matching 
+
 ```{r}
-
-# Adding propensity score to estimation
 X1 = cbind(X,data12$propensity.score)
-
 ```
 
+# Doing the actual genetic matching 
 ```{r}
 minimump= c()
 
 set.seed(1)
 
+#Generating matches
 gen1 = GenMatch(Tr= data12$treat, 
                 starting.values = genweight,
-                X=X1, pop.size=1000, replace=TRUE, max.weight=1)
+                X=X1, pop.size=1000, replace=TRUE, ties= TRUE, max.weight=1)
 
+# Doing the actual matching
 mgen1=Match(Y= data12$sishand_recovery,BiasAdjust = TRUE, estimand= "ATT", Tr=data12$treat, X=X1, Weight.matrix = gen1)
 
+```
+
+### Assessing balance, checking minimum p value
+Note that "MatchBalance" is used to determine if Match was successful in achieving balance on the observed covariates.
+
+-treat~SIS_hand+ ...
+This formula does not estimate any model. The formula is simply an efficient way to use the R modeling language to list the variables we wish to obtain univariate balance statistics for. The dependent variable in the formula is usually the treatment indicator
+
+-nboots= 1000
+The number of bootstrap samples to be run. If zero, no bootstraps are done. Bootstrapping is highly recommended because the bootstrapped Kolmogorov-Smirnov test provides correct coverage even when the distributions being compared are not continuous. At least 500 nboots (preferably 1000) are recommended for publication quality p-values.
+
+```{r}
+#using 57 features
 balanceA = MatchBalance(treat~ ave_CAHM + CHAMchallenge + SIS_hand + ufugm + 
                NIHtot + log_mean_time_MA_PA + log_mean_time_LA_PA + EQ_index +
                 grip_MA +grip_LA +RNLIadj+
@@ -507,49 +361,27 @@ balanceA = MatchBalance(treat~ ave_CAHM + CHAMchallenge + SIS_hand + ufugm +
                  
                  edu.noHSdegree +edu.finishHS +edu.someCollege + edu.finishCollege+ 
               
-                 stroke.loc.RightH+ stroke.loc.LeftH +stroke.loc.cerebellar +stroke.loc.brainstem+
+                 stroke.loc.RightH+ stroke.loc.LeftH +
+                 stroke.loc.cerebellar +stroke.loc.brainstem+
                stroke.type.ISCHEMIC.wo.hemorrhagic.conversion+
                stroke.type.ISCHEMIC.with.hemorrhagic.conversion +
                stroke.type.intraparenchymal.HEMORRHAGIC + stroke.type.other
-           # + propensity.score
+            + propensity.score
            ,
                
-               data= data12, match.out= mgen1, nboots=1000)
+               data= data12, match.out= mgen1, nboots=50000)
 
 minimump=c(minimump, balanceA$AMsmallest.p.value) 
 
 print(balanceA$AMsmallest.p.value)
 ```
 
-####Summary of the model will tell us about Causal relationship
+####Summary.Match of the model will tell us about Causal relationship after balancing
 ```{r}
-summary(mgen1)
+mgen1=Match(Y= data12$logwmftMA_recovery,BiasAdjust = TRUE, estimand= "ATT", Tr=data12$treat, X=X1, Weight.matrix = gen1)
+summary.Match(mgen1, full = TRUE)
 ```
 
-
-#### Assessing balance
-```{r}
-MatchBalance(treat~ ave_CAHM + CHAMchallenge + SIS_hand + ufugm + NIHtot + log_mean_time_MA_PA +
-               log_mean_time_LA_PA + EQ_index +grip_MA +grip_LA +RNLIadj+
-
-               CSgender+ concordance +  onset_to_rand + CStpa + age_at_rand +
-               FCtotalOT+ log2.A1EstVol+ old_stroke + DEMOsmoke+ leukoaraiosis+ multlesions+
-
-               Site.code.1+ Site.code.2+ Site.code.3+Site.code.4+
-               Site.code.5+ Site.code.6+ Site.code.7+ predominant.AC+
-               predominant.ACH +predominant.basilar+ predominant.IB+
-               predominant.LS+ predominant.MC+ predominant.PCA+
-               predominant.vertebral +predominant.THP+ hispanic.latino+nonhispanic.latino+
-               race.asian+ race.africanam+ race.caucasian +
-               race.other+ edu.noHSdegree +edu.finishHS +edu.someCollege +
-               edu.finishCollege+ stroke.loc.RightH+
-               stroke.loc.LeftH +stroke.loc.cerebellar +stroke.loc.brainstem+
-               propensity.score,
-             
-               data= data12, match.out= mgen1, nboots=1000)
-
-
-```
 
 
 
@@ -559,9 +391,10 @@ length(unique(mgen1$index.treated))
 length(unique(mgen1$index.control))
 ```
 
+
+#Additional way of checking balance
+
 ```{r}
-
-
 (bal.tab(mgen1, treat~ ave_CAHM + CHAMchallenge + SIS_hand + ufugm + NIHtot + log_mean_time_MA_PA +
                log_mean_time_LA_PA + EQ_index +grip_MA +grip_LA +RNLIadj+
 
@@ -573,18 +406,18 @@ length(unique(mgen1$index.control))
                predominant.ACH +predominant.basilar+ predominant.IB+
                predominant.LS+ predominant.MC+ predominant.PCA+
                predominant.vertebral +predominant.THP+ hispanic.latino+nonhispanic.latino+
-               race.asian+ race.africanam+ race.caucasian +
-               race.other+ edu.noHSdegree +edu.finishHS +edu.someCollege +
-               edu.finishCollege+ stroke.loc.RightH+
-               stroke.loc.LeftH +stroke.loc.cerebellar +stroke.loc.brainstem,
+               race.asian+ race.africanam+ race.caucasian + race.other+ 
+               edu.noHSdegree +edu.finishHS +edu.someCollege + edu.finishCollege+ 
+               stroke.loc.RightH+ stroke.loc.LeftH +stroke.loc.cerebellar +stroke.loc.brainstem +          M =                propensity.score,
 
-         disp.v.ratio = TRUE, data = data12,abs= TRUE, m.threshold =0.2))
+         disp.v.ratio = TRUE, data = data12,abs= TRUE, m.threshold =0.3))
 ```
 
 
+# Plotting distributions of continuous variables before and after matching
+
 ```{r}
 columns = colnames(data12)
-# for (i in c(2:11,13,15,17,20)){
 for (i in c(2:12,14,16,18,21)){
   string= columns[i]
   
@@ -630,8 +463,10 @@ for (i in c(2:12,14,16,18,21)){
 ```
 
 
+# Plotting distributions of binary variables before and after matching
+
+
 ```{r}
-# for (i in c(14,16,18,19,21:53)){
 for (i in c(15,17,19,20,22:54)){
   string= columns[i]
   
@@ -656,40 +491,7 @@ for (i in c(15,17,19,20,22:54)){
 ```
 
 
-## Checking normality
-```{r}
-library("ggpubr")
-#not normal if p is <0.05
-shapiro.test(data12$logwmftMA_recovery[mgen1$index.treated])
-shapiro.test(data12$logwmftMA_recovery[mgen1$index.control])
-
-shapiro.test(data12$sishand_recovery[mgen1$index.treated])
-shapiro.test(data12$sishand_recovery[mgen1$index.control])
-
-shapiro.test(data12$fugm_recovery[mgen1$index.treated])
-shapiro.test(data12$fugm_recovery[mgen1$index.control])
-
-
-# cor(as.matrix(data12[,2:28]))
-```
-
-## Ttests
-```{r}
-
-t.test(data12$sishand_recovery[mgen1$index.treated],data12$sishand_recovery[mgen1$index.control],paired = TRUE)
-
-# Experimenting with outcomes from linear regression
-# datar= rbind(data12[mgen1$index.treated,],data12[mgen1$index.control,])
-# datar= datar[,c(2:12,14:63,67,70)]
-# summary(lm(sishand_recovery~treat,datar))
-# summary(lm(sishand_recovery~.,datar))
-
-
-wilcox.test(data12$logwmftMA_recovery[mgen1$index.treated],data12$logwmftMA_recovery[mgen1$index.control],paired = TRUE)
-
-wilcox.test(data12$fugm_recovery[mgen1$index.treated],data12$fugm_recovery[mgen1$index.control],paired = TRUE)
-
-```
+## Extra stuff
 
 ```{r}
  dose_hours= c(data12$dose_hours[mgen1$index.treated],data12$dose_hours[mgen1$index.control])
