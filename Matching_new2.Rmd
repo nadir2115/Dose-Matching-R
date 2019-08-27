@@ -27,6 +27,7 @@ library(Matching)
 library(cobalt)
 library(onehot)
 library(pander)
+library(gridExtra)
 ```
 
 ### Thresholds
@@ -235,18 +236,18 @@ data12$treat=ifelse(data12$dose_hours<=27, 1, 0)
 
 ### This line removes all subjects between 16-29 hours of dosage and changes starting weights
 ```{r}
-# data12=data12[data12$dose_hours>=Hthreshold | data12$dose_hours<=Lthreshold,]
-# 
-# genweight = c(0.830426260, 0.724817864, 0.651582563, 0.297741502, 0.830889340, 0.087003014,
-#  0.638399491, 0.121175618, 0.969273674, 0.785379687, 0.190612974, 0.816637110,
-#  0.880788106, 0.631580992, 0.599959964, 0.437396421, 0.300651108, 0.942747991,
-#  0.034287552, 0.447049238, 0.943430585, 0.214020309, 0.831556053, 0.204920316,
-#  0.834063460, 0.265514404, 0.025610668, 0.149471313, 0.796257628, 0.333164340,
-#  0.744276975, 0.136378485, 0.624898450, 0.736891277, 0.045765780, 0.510092046,
-#  0.742510688, 0.958445071, 0.628410029, 0.566133301, 0.190156881, 0.155908728,
-#  0.191743071, 0.058801373, 0.342044210, 0.396892759, 0.122116592, 0.107519303,
-#  0.420979936, 0.087684545, 0.404056359, 0.005771743, 0.650855758, 0.224358681,
-#  0.666497053, 0.120712778, 0.875230230)
+data12=data12[data12$dose_hours>=Hthreshold | data12$dose_hours<=Lthreshold,]
+
+genweight = c(0.830426260, 0.724817864, 0.651582563, 0.297741502, 0.830889340, 0.087003014,
+ 0.638399491, 0.121175618, 0.969273674, 0.785379687, 0.190612974, 0.816637110,
+ 0.880788106, 0.631580992, 0.599959964, 0.437396421, 0.300651108, 0.942747991,
+ 0.034287552, 0.447049238, 0.943430585, 0.214020309, 0.831556053, 0.204920316,
+ 0.834063460, 0.265514404, 0.025610668, 0.149471313, 0.796257628, 0.333164340,
+ 0.744276975, 0.136378485, 0.624898450, 0.736891277, 0.045765780, 0.510092046,
+ 0.742510688, 0.958445071, 0.628410029, 0.566133301, 0.190156881, 0.155908728,
+ 0.191743071, 0.058801373, 0.342044210, 0.396892759, 0.122116592, 0.107519303,
+ 0.420979936, 0.087684545, 0.404056359, 0.005771743, 0.650855758, 0.224358681,
+ 0.666497053, 0.120712778, 0.875230230)
 
 ```
 
@@ -281,7 +282,6 @@ data12$propensity.score= model$fitted.values
 
 
 ### Matching and estimating effects of causality using "Match" package
-
 "Match" implements a variety of algorithms for multivariate matching including propensity score, Mahalanobis and inverse variance matching. The function is intended to be used in conjunction with the MatchBalance function which determines the extent to which Match has been able to achieve covariate balance
 - Y=y
 A vector containing the outcome of interest. Missing values are not allowed. An outcome vector is not required because the matches generated will be the same regardless of the outcomes. Of course, without any outcomes no causal effect estimates will be produced, only a matched dataset.
@@ -332,7 +332,7 @@ mgen1=Match(Y= data12$sishand_recovery,BiasAdjust = TRUE, estimand= "ATT", Tr=da
 
 ```
 
-### Assessing balance, checking minimum p value
+## Assessing balance, checking minimum p value
 Note that "MatchBalance" is used to determine if Match was successful in achieving balance on the observed covariates.
 
 -treat~SIS_hand+ ...
@@ -341,18 +341,20 @@ This formula does not estimate any model. The formula is simply an efficient way
 -nboots= 1000
 The number of bootstrap samples to be run. If zero, no bootstraps are done. Bootstrapping is highly recommended because the bootstrapped Kolmogorov-Smirnov test provides correct coverage even when the distributions being compared are not continuous. At least 500 nboots (preferably 1000) are recommended for publication quality p-values.
 
+## Note that commenting out propensity score in the code below doesn't mean that weights for propensity score wasn't used for creating matches during genetic matching. It just means that propensity scores are not looked at when evaluating overall balance acheived after Matching
 ```{r}
 #using 57 features
 balanceA = MatchBalance(treat~ ave_CAHM + CHAMchallenge + SIS_hand + ufugm + 
                NIHtot + log_mean_time_MA_PA + log_mean_time_LA_PA + EQ_index +
                 grip_MA +grip_LA +RNLIadj+
-
+                 
                CSgender+ concordance +  onset_to_rand + CStpa + age_at_rand +
                FCtotalOT+ log2.A1EstVol+old_stroke +DEMOsmoke+ leukoaraiosis+ multlesions+
 
                Site.code.1+ Site.code.2+ Site.code.3+Site.code.4+
-               Site.code.5+ Site.code.6+ Site.code.7+ predominant.AC+
-               predominant.ACH +predominant.basilar+ predominant.IB+
+               Site.code.5+ Site.code.6+ Site.code.7+ 
+                 
+                 predominant.AC+ predominant.ACH +predominant.basilar+ predominant.IB+
                predominant.LS+ predominant.MC+ predominant.PCA+
                predominant.vertebral +predominant.THP+ 
                
@@ -363,13 +365,14 @@ balanceA = MatchBalance(treat~ ave_CAHM + CHAMchallenge + SIS_hand + ufugm +
               
                  stroke.loc.RightH+ stroke.loc.LeftH +
                  stroke.loc.cerebellar +stroke.loc.brainstem+
-               stroke.type.ISCHEMIC.wo.hemorrhagic.conversion+
+               
+                 stroke.type.ISCHEMIC.wo.hemorrhagic.conversion+
                stroke.type.ISCHEMIC.with.hemorrhagic.conversion +
                stroke.type.intraparenchymal.HEMORRHAGIC + stroke.type.other
             + propensity.score
            ,
                
-               data= data12, match.out= mgen1, nboots=50000)
+               data= data12, match.out= mgen1, nboots=2000)
 
 minimump=c(minimump, balanceA$AMsmallest.p.value) 
 
@@ -378,11 +381,9 @@ print(balanceA$AMsmallest.p.value)
 
 ####Summary.Match of the model will tell us about Causal relationship after balancing
 ```{r}
-mgen1=Match(Y= data12$logwmftMA_recovery,BiasAdjust = TRUE, estimand= "ATT", Tr=data12$treat, X=X1, Weight.matrix = gen1)
+mgen1=Match(Y= data12$sishand_recovery,BiasAdjust = TRUE, estimand= "ATT", Tr=data12$treat, X=X1, Weight.matrix = gen1)
 summary.Match(mgen1, full = TRUE)
 ```
-
-
 
 
 ### Checking number of unique subjects after genetic matching
@@ -392,25 +393,37 @@ length(unique(mgen1$index.control))
 ```
 
 
-#Additional way of checking balance
-
+#Additional method of checking balance (STROKE.TYPE.OTHER not showing??)
 ```{r}
-(bal.tab(mgen1, treat~ ave_CAHM + CHAMchallenge + SIS_hand + ufugm + NIHtot + log_mean_time_MA_PA +
-               log_mean_time_LA_PA + EQ_index +grip_MA +grip_LA +RNLIadj+
+(bal.tab(mgen1, treat~ ave_CAHM + CHAMchallenge + SIS_hand + ufugm + 
+               NIHtot + log_mean_time_MA_PA + log_mean_time_LA_PA + EQ_index +
+                grip_MA +grip_LA +RNLIadj+
 
                CSgender+ concordance +  onset_to_rand + CStpa + age_at_rand +
                FCtotalOT+ log2.A1EstVol+old_stroke +DEMOsmoke+ leukoaraiosis+ multlesions+
 
                Site.code.1+ Site.code.2+ Site.code.3+Site.code.4+
-               Site.code.5+ Site.code.6+ Site.code.7+ predominant.AC+
-               predominant.ACH +predominant.basilar+ predominant.IB+
-               predominant.LS+ predominant.MC+ predominant.PCA+
-               predominant.vertebral +predominant.THP+ hispanic.latino+nonhispanic.latino+
+               Site.code.5+ Site.code.6+ Site.code.7+ 
+           
+               predominant.AC+  predominant.ACH +predominant.basilar+ predominant.IB+
+               predominant.LS+ predominant.MC+ predominant.PCA+  predominant.vertebral +predominant.THP+ 
+               
+               hispanic.latino+nonhispanic.latino+
+           
                race.asian+ race.africanam+ race.caucasian + race.other+ 
-               edu.noHSdegree +edu.finishHS +edu.someCollege + edu.finishCollege+ 
-               stroke.loc.RightH+ stroke.loc.LeftH +stroke.loc.cerebellar +stroke.loc.brainstem +          M =                propensity.score,
+                 
+                 edu.noHSdegree +edu.finishHS +edu.someCollege + edu.finishCollege+ 
+              
+                 stroke.loc.RightH+ stroke.loc.LeftH +
+                 stroke.loc.cerebellar +stroke.loc.brainstem+
+           
+               stroke.type.ISCHEMIC.wo.hemorrhagic.conversion+
+               stroke.type.ISCHEMIC.with.hemorrhagic.conversion +
+               stroke.type.intraparenchymal.HEMORRHAGIC + stroke.type.other+
+           
+              propensity.score,
 
-         disp.v.ratio = TRUE, data = data12,abs= TRUE, m.threshold =0.3))
+         disp.v.ratio = TRUE, data = data12,abs= TRUE, m.threshold =0.25))
 ```
 
 
